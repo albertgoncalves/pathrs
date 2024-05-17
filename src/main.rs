@@ -77,16 +77,40 @@ fn compile_shader(r#type: ffi::GLenum, source: &str) -> ffi::GLuint {
     }
 }
 
-macro_rules! buffer {
-    ($target:expr, $ty:ty, $data:expr, $usage:expr $(,)?) => {
-        ffi::glBindBuffer(ffi::GL_ARRAY_BUFFER, $target);
+fn create_program() -> ffi::GLuint {
+    unsafe {
+        let program = ffi::glCreateProgram();
+
+        let vert_shader = compile_shader(
+            ffi::GL_VERTEX_SHADER,
+            &read_to_string(Path::new("src").join("vert.glsl")).unwrap(),
+        );
+        defer!(ffi::glDeleteShader(vert_shader));
+
+        let frag_shader = compile_shader(
+            ffi::GL_FRAGMENT_SHADER,
+            &read_to_string(Path::new("src").join("frag.glsl")).unwrap(),
+        );
+        defer!(ffi::glDeleteShader(frag_shader));
+
+        ffi::glAttachShader(program, vert_shader);
+        ffi::glAttachShader(program, frag_shader);
+        ffi::glLinkProgram(program);
+
+        program
+    }
+}
+
+fn buffer<T>(target: ffi::GLuint, data: &[T], usage: ffi::GLenum) {
+    unsafe {
+        ffi::glBindBuffer(ffi::GL_ARRAY_BUFFER, target);
         ffi::glBufferData(
             ffi::GL_ARRAY_BUFFER,
-            (mem::size_of::<$ty>() * $data.len()).try_into().unwrap(),
-            $data.as_ptr().cast::<c_void>(),
-            $usage,
+            mem::size_of_val(data).try_into().unwrap(),
+            data.as_ptr().cast::<c_void>(),
+            usage,
         );
-    };
+    }
 }
 
 macro_rules! index {
@@ -152,25 +176,72 @@ macro_rules! uniform {
     };
 }
 
+fn buffers_and_attributes(
+    program: ffi::GLuint,
+    vao: ffi::GLuint,
+    vbo: ffi::GLuint,
+    instance_vbo: ffi::GLuint,
+    geoms: &[Geom<ffi::GLfloat>],
+    vertices: &[math::Vec2<ffi::GLfloat>],
+) {
+    unsafe {
+        ffi::glBindVertexArray(vao);
+
+        buffer(vbo, vertices, ffi::GL_STATIC_DRAW);
+        attribute!(program, math::Vec2<ffi::GLfloat>, position);
+
+        buffer(instance_vbo, geoms, ffi::GL_DYNAMIC_DRAW);
+        attribute!(program, Geom<ffi::GLfloat>, translate, 1);
+        attribute!(program, Geom<ffi::GLfloat>, scale, 1);
+        attribute!(program, Geom<ffi::GLfloat>, color, 1);
+    }
+}
+
+fn bind_and_draw(
+    vao: ffi::GLuint,
+    instance_vbo: ffi::GLuint,
+    geoms: &[Geom<ffi::GLfloat>],
+    vertices: &[math::Vec2<ffi::GLfloat>],
+    mode: ffi::GLenum,
+) {
+    unsafe {
+        ffi::glBindVertexArray(vao);
+        ffi::glBindBuffer(ffi::GL_ARRAY_BUFFER, instance_vbo);
+        ffi::glBufferSubData(
+            ffi::GL_ARRAY_BUFFER,
+            0,
+            mem::size_of_val(geoms).try_into().unwrap(),
+            geoms.as_ptr().cast::<c_void>(),
+        );
+        ffi::glDrawArraysInstanced(
+            mode,
+            0,
+            vertices.len().try_into().unwrap(),
+            geoms.len().try_into().unwrap(),
+        );
+    }
+}
+
+fn pressed(window: *mut ffi::GLFWwindow, key: c_int) -> bool {
+    unsafe { ffi::glfwGetKey(window, key) == ffi::GLFW_PRESS }
+}
+
 fn main() {
     let window_width = 1400;
     let window_height = 900;
 
-    let view_zoom: f32 = 1.5;
-    let view_rotate: f32 = std::f32::consts::PI;
+    let view_zoom = 1.5;
 
-    let accel: f32 = 3.125;
-    let drag: f32 = 0.81125;
-
-    let player = Geom {
-        translate: math::Vec2::default(),
-        scale: 25.0.into(),
-        color: math::Vec3 {
-            x: 1.0,
-            y: 0.5,
-            z: 0.75,
-        },
+    #[allow(clippy::cast_precision_loss)]
+    let view_translate = math::Vec2 {
+        x: ((window_width / 2) as f32) / view_zoom,
+        y: ((window_height / 2) as f32) / view_zoom,
     };
+    let mut view_rotate = std::f32::consts::PI;
+
+    let acceleration = 3.125;
+    let drag = 0.81125;
+    let spin = 0.005;
 
     let background_color = math::Vec3 {
         x: 0.1,
@@ -178,12 +249,37 @@ fn main() {
         z: 0.11,
     };
 
-    let vertices: [math::Vec2<ffi::GLfloat>; 4] = [
+    let mut quads = [Geom {
+        translate: math::Vec2::default(),
+        scale: 25.0.into(),
+        color: math::Vec3 {
+            x: 1.0,
+            y: 0.5,
+            z: 0.75,
+        },
+    }];
+    let mut lines = [Geom {
+        translate: math::Vec2::default(),
+        scale: 1000.0.into(),
+        color: math::Vec3 {
+            x: 0.75,
+            y: 0.1,
+            z: 0.25,
+        },
+    }];
+
+    let quad_vertices = [
         math::Vec2 { x: 0.5, y: 0.5 },
         math::Vec2 { x: 0.5, y: -0.5 },
         math::Vec2 { x: -0.5, y: 0.5 },
         math::Vec2 { x: -0.5, y: -0.5 },
     ];
+    let line_vertices = [
+        math::Vec2 { x: -0.5, y: -0.5 },
+        math::Vec2 { x: 0.5, y: 0.5 },
+    ];
+
+    let line_width = 5.0;
 
     #[allow(clippy::cast_precision_loss)]
     let projection = math::orthographic(
@@ -193,15 +289,6 @@ fn main() {
         0.0,
         -1.0,
         1.0,
-    );
-
-    #[allow(clippy::cast_precision_loss)]
-    let view = math::translate_rotate(
-        math::Vec2 {
-            x: ((window_width / 2) as f32) / view_zoom,
-            y: ((window_height / 2) as f32) / view_zoom,
-        },
-        view_rotate,
     );
 
     unsafe {
@@ -253,52 +340,32 @@ fn main() {
         ffi::glEnable(ffi::GL_MULTISAMPLE);
         ffi::glViewport(0, 0, window_width, window_height);
 
-        let program = ffi::glCreateProgram();
-        {
-            let vert_shader = compile_shader(
-                ffi::GL_VERTEX_SHADER,
-                &read_to_string(Path::new("src").join("vert.glsl")).unwrap(),
-            );
-            defer!(ffi::glDeleteShader(vert_shader));
+        let mut vao: [ffi::GLuint; 2] = [0; 2];
+        ffi::glGenVertexArrays(vao.len().try_into().unwrap(), vao.as_mut_ptr());
+        defer!(ffi::glDeleteVertexArrays(vao.len().try_into().unwrap(), vao.as_ptr()));
 
-            let frag_shader = compile_shader(
-                ffi::GL_FRAGMENT_SHADER,
-                &read_to_string(Path::new("src").join("frag.glsl")).unwrap(),
-            );
-            defer!(ffi::glDeleteShader(frag_shader));
+        let mut vbo: [ffi::GLuint; 2] = [0; 2];
+        ffi::glGenBuffers(vbo.len().try_into().unwrap(), vbo.as_mut_ptr());
+        defer!(ffi::glDeleteBuffers(vbo.len().try_into().unwrap(), vbo.as_ptr()));
 
-            ffi::glAttachShader(program, vert_shader);
-            ffi::glAttachShader(program, frag_shader);
-            ffi::glLinkProgram(program);
-        }
+        let mut instance_vbo: [ffi::GLuint; 2] = [0; 2];
+        ffi::glGenBuffers(instance_vbo.len().try_into().unwrap(), instance_vbo.as_mut_ptr());
+        defer!(ffi::glDeleteBuffers(
+            instance_vbo.len().try_into().unwrap(),
+            instance_vbo.as_ptr()
+        ));
+
+        let program = create_program();
+        defer!(ffi::glDeleteProgram(program));
         ffi::glUseProgram(program);
 
-        let mut vao: ffi::GLuint = 0;
-        ffi::glGenVertexArrays(1, &mut vao);
-        defer!(ffi::glDeleteVertexArrays(1, &vao));
-
-        let mut vbo: ffi::GLuint = 0;
-        ffi::glGenBuffers(1, &mut vbo);
-        defer!(ffi::glDeleteBuffers(1, &vbo));
-
-        let mut instance_vbo: ffi::GLuint = 0;
-        ffi::glGenBuffers(1, &mut instance_vbo);
-        defer!(ffi::glDeleteBuffers(1, &instance_vbo));
-
-        ffi::glBindVertexArray(vao);
-
-        buffer!(vbo, math::Vec2<ffi::GLfloat>, vertices, ffi::GL_STATIC_DRAW);
-        attribute!(program, math::Vec2<ffi::GLfloat>, position);
-
-        let mut geoms: [Geom<ffi::GLfloat>; 1] = [player];
-
-        buffer!(instance_vbo, Geom<ffi::GLfloat>, geoms, ffi::GL_DYNAMIC_DRAW);
-        attribute!(program, Geom<ffi::GLfloat>, translate, 1);
-        attribute!(program, Geom<ffi::GLfloat>, scale, 1);
-        attribute!(program, Geom<ffi::GLfloat>, color, 1);
+        ffi::glLineWidth(line_width);
+        ffi::glEnable(ffi::GL_LINE_SMOOTH);
 
         uniform!(program, projection);
-        uniform!(program, view);
+
+        buffers_and_attributes(program, vao[0], vbo[0], instance_vbo[0], &quads, &quad_vertices);
+        buffers_and_attributes(program, vao[1], vbo[1], instance_vbo[1], &lines, &line_vertices);
 
         let mut now = time::Instant::now();
         let mut frames = 0;
@@ -321,40 +388,36 @@ fn main() {
             ffi::glfwPollEvents();
 
             let mut r#move: math::Vec2<f32> = math::Vec2::default();
-            if ffi::glfwGetKey(window, ffi::GLFW_KEY_W) == ffi::GLFW_PRESS {
+            if pressed(window, ffi::GLFW_KEY_W) {
                 r#move.y -= 1.0;
             }
-            if ffi::glfwGetKey(window, ffi::GLFW_KEY_S) == ffi::GLFW_PRESS {
+            if pressed(window, ffi::GLFW_KEY_S) {
                 r#move.y += 1.0;
             }
-            if ffi::glfwGetKey(window, ffi::GLFW_KEY_A) == ffi::GLFW_PRESS {
+            if pressed(window, ffi::GLFW_KEY_A) {
                 r#move.x -= 1.0;
             }
-            if ffi::glfwGetKey(window, ffi::GLFW_KEY_D) == ffi::GLFW_PRESS {
+            if pressed(window, ffi::GLFW_KEY_D) {
                 r#move.x += 1.0;
             }
             math::turn(&mut r#move, math::Vec2::default(), view_rotate);
             math::normalize(&mut r#move);
 
-            speed += r#move * accel.into();
+            speed += r#move * acceleration.into();
             speed *= drag.into();
-            geoms[0].translate += speed;
+            quads[0].translate += speed;
+            lines[0].translate += speed;
+
+            view_rotate += spin;
+            // TODO: This doesn't spin correctly.
+            let view = math::translate_and_rotate(view_translate, view_rotate);
+            uniform!(program, view);
 
             ffi::glClear(ffi::GL_COLOR_BUFFER_BIT);
-            ffi::glBufferSubData(
-                ffi::GL_ARRAY_BUFFER,
-                0,
-                (mem::size_of::<Geom<ffi::GLfloat>>() * geoms.len())
-                    .try_into()
-                    .unwrap(),
-                geoms.as_ptr().cast::<c_void>(),
-            );
-            ffi::glDrawArraysInstanced(
-                ffi::GL_TRIANGLE_STRIP,
-                0,
-                vertices.len().try_into().unwrap(),
-                geoms.len().try_into().unwrap(),
-            );
+
+            bind_and_draw(vao[0], instance_vbo[0], &quads, &quad_vertices, ffi::GL_TRIANGLE_STRIP);
+            bind_and_draw(vao[1], instance_vbo[1], &lines, &line_vertices, ffi::GL_LINES);
+
             ffi::glfwSwapBuffers(window);
 
             frames += 1;

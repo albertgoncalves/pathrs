@@ -84,6 +84,8 @@ extern "C" {
     pub fn glClearColor(red: GLclampf, green: GLclampf, blue: GLclampf, alpha: GLclampf);
     pub fn glClear(mask: GLbitfield);
 
+    pub fn glLineWidth(width: GLfloat);
+
     pub fn glCreateShader(r#type: GLenum) -> GLuint;
     pub fn glShaderSource(
         shader: GLuint,
@@ -95,6 +97,7 @@ extern "C" {
     pub fn glDeleteShader(shader: GLuint);
 
     pub fn glCreateProgram() -> GLuint;
+    pub fn glDeleteProgram(program: GLuint);
     pub fn glAttachShader(program: GLuint, shader: GLuint);
     pub fn glLinkProgram(program: GLuint);
     pub fn glUseProgram(program: GLuint);
@@ -158,8 +161,11 @@ pub const GL_FALSE: GLboolean = 0;
 
 pub const GL_FLOAT: GLenum = 0x1406;
 
+pub const GL_LINES: GLenum = 0x0001;
 // pub const GL_TRIANGLES: GLenum = 0x0004;
 pub const GL_TRIANGLE_STRIP: GLenum = 0x0005;
+
+pub const GL_LINE_SMOOTH: GLenum = 0x0B20;
 
 pub const GL_VERTEX_SHADER: GLenum = 0x8B31;
 pub const GL_FRAGMENT_SHADER: GLenum = 0x8B30;

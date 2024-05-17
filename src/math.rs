@@ -98,7 +98,7 @@ pub fn orthographic(
     column_row
 }
 
-pub fn translate_rotate(translate: Vec2<f32>, rotate_radians: f32) -> Mat4<f32> {
+pub fn translate_and_rotate(translate: Vec2<f32>, rotate_radians: f32) -> Mat4<f32> {
     let s = rotate_radians.sin();
     let c = rotate_radians.cos();
     let mut column_row = [[0.0; 4]; 4];
