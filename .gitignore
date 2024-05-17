@@ -1,0 +1,7 @@
+*
+!.gitignore
+!rustfmt.toml
+!Makefile
+!src/
+!*.rs
+!*.glsl
