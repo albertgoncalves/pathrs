@@ -1,9 +1,9 @@
 mod defer;
 mod ffi;
 mod math;
+mod prelude;
 
 use crate::defer::Defer;
-use crate::math::Normalize;
 use std::convert::TryInto;
 use std::ffi::{c_char, c_int, c_void, CStr, CString};
 use std::fs::read_to_string;
@@ -89,20 +89,9 @@ macro_rules! buffer {
     };
 }
 
-macro_rules! size_of_field {
-    ($ty:ty, $field:ident $(,)?) => {{
-        const fn infer<T>(_: *const T) -> usize {
-            mem::size_of::<T>()
-        }
-        let r#struct = mem::MaybeUninit::<$ty>::uninit();
-        let field = ptr::addr_of!((*r#struct.as_ptr()).$field);
-        infer(field)
-    }};
-}
-
-macro_rules! attribute {
-    ($program:expr, $ty:ty, $ident:ident $(,)?) => {{
-        let index = ffi::glGetAttribLocation(
+macro_rules! index {
+    ($program:expr, $ident:ident $(,)?) => {
+        ffi::glGetAttribLocation(
             $program,
             CStr::from_bytes_with_nul(concat!(stringify!($ident), '\0').as_bytes())
                 .unwrap()
@@ -110,7 +99,13 @@ macro_rules! attribute {
                 .cast::<ffi::GLchar>(),
         )
         .try_into()
-        .unwrap();
+        .unwrap()
+    };
+}
+
+macro_rules! attribute {
+    ($program:expr, $ty:ty, $ident:ident $(,)?) => {{
+        let index = index!($program, $ident);
         ffi::glEnableVertexAttribArray(index);
         ffi::glVertexAttribPointer(
             index,
@@ -124,15 +119,7 @@ macro_rules! attribute {
         );
     }};
     ($program:expr, $ty:ty, $field:ident, $div:expr $(,)?) => {{
-        let index = ffi::glGetAttribLocation(
-            $program,
-            CStr::from_bytes_with_nul(concat!(stringify!($field), '\0').as_bytes())
-                .unwrap()
-                .as_ptr()
-                .cast::<ffi::GLchar>(),
-        )
-        .try_into()
-        .unwrap();
+        let index = index!($program, $field);
         ffi::glEnableVertexAttribArray(index);
         ffi::glVertexAttribPointer(
             index,
@@ -148,7 +135,75 @@ macro_rules! attribute {
     }};
 }
 
+macro_rules! uniform {
+    ($program:expr, $ident:ident $(,)?) => {
+        ffi::glUniformMatrix4fv(
+            ffi::glGetUniformLocation(
+                $program,
+                CStr::from_bytes_with_nul(concat!(stringify!($ident), '\0').as_bytes())
+                    .unwrap()
+                    .as_ptr()
+                    .cast::<ffi::GLchar>(),
+            ),
+            1,
+            ffi::GL_FALSE,
+            $ident.as_ptr().cast::<ffi::GLfloat>(),
+        );
+    };
+}
+
 fn main() {
+    let window_width = 1400;
+    let window_height = 900;
+
+    let view_zoom: f32 = 1.5;
+    let view_rotate: f32 = std::f32::consts::PI;
+
+    let accel: f32 = 3.125;
+    let drag: f32 = 0.81125;
+
+    let player = Geom {
+        translate: math::Vec2::default(),
+        scale: 25.0.into(),
+        color: math::Vec3 {
+            x: 1.0,
+            y: 0.5,
+            z: 0.75,
+        },
+    };
+
+    let background_color = math::Vec3 {
+        x: 0.1,
+        y: 0.09,
+        z: 0.11,
+    };
+
+    let vertices: [math::Vec2<ffi::GLfloat>; 4] = [
+        math::Vec2 { x: 0.5, y: 0.5 },
+        math::Vec2 { x: 0.5, y: -0.5 },
+        math::Vec2 { x: -0.5, y: 0.5 },
+        math::Vec2 { x: -0.5, y: -0.5 },
+    ];
+
+    #[allow(clippy::cast_precision_loss)]
+    let projection = math::orthographic(
+        0.0,
+        (window_width as f32) / view_zoom,
+        (window_height as f32) / view_zoom,
+        0.0,
+        -1.0,
+        1.0,
+    );
+
+    #[allow(clippy::cast_precision_loss)]
+    let view = math::translate_rotate(
+        math::Vec2 {
+            x: ((window_width / 2) as f32) / view_zoom,
+            y: ((window_height / 2) as f32) / view_zoom,
+        },
+        view_rotate,
+    );
+
     unsafe {
         println!(
             "{}",
@@ -169,12 +224,9 @@ fn main() {
         ffi::glfwWindowHint(ffi::GLFW_RESIZABLE, 0);
         ffi::glfwWindowHint(ffi::GLFW_SAMPLES, 16);
 
-        let width = 1400;
-        let height = 900;
-
         let window = ffi::glfwCreateWindow(
-            width,
-            height,
+            window_width,
+            window_height,
             CString::new(std::module_path!())
                 .unwrap()
                 .as_bytes_with_nul()
@@ -197,9 +249,9 @@ fn main() {
 
         ffi::glEnable(ffi::GL_BLEND);
         ffi::glBlendFunc(ffi::GL_SRC_ALPHA, ffi::GL_ONE_MINUS_SRC_ALPHA);
-        ffi::glClearColor(0.1, 0.1, 0.1, 1.0);
+        ffi::glClearColor(background_color.x, background_color.y, background_color.z, 1.0);
         ffi::glEnable(ffi::GL_MULTISAMPLE);
-        ffi::glViewport(0, 0, width, height);
+        ffi::glViewport(0, 0, window_width, window_height);
 
         let program = ffi::glCreateProgram();
         {
@@ -221,23 +273,6 @@ fn main() {
         }
         ffi::glUseProgram(program);
 
-        let vertices: [math::Vec2<ffi::GLfloat>; 4] = [
-            math::Vec2 { x: 0.5, y: 0.5 },
-            math::Vec2 { x: 0.5, y: -0.5 },
-            math::Vec2 { x: -0.5, y: 0.5 },
-            math::Vec2 { x: -0.5, y: -0.5 },
-        ];
-
-        let mut geoms: [Geom<ffi::GLfloat>; 1] = [Geom {
-            translate: math::Vec2::default(),
-            scale: 25.0.into(),
-            color: math::Vec3 {
-                x: 1.0,
-                y: 0.5,
-                z: 0.75,
-            },
-        }];
-
         let mut vao: ffi::GLuint = 0;
         ffi::glGenVertexArrays(1, &mut vao);
         defer!(ffi::glDeleteVertexArrays(1, &vao));
@@ -255,49 +290,20 @@ fn main() {
         buffer!(vbo, math::Vec2<ffi::GLfloat>, vertices, ffi::GL_STATIC_DRAW);
         attribute!(program, math::Vec2<ffi::GLfloat>, position);
 
+        let mut geoms: [Geom<ffi::GLfloat>; 1] = [player];
+
         buffer!(instance_vbo, Geom<ffi::GLfloat>, geoms, ffi::GL_DYNAMIC_DRAW);
         attribute!(program, Geom<ffi::GLfloat>, translate, 1);
         attribute!(program, Geom<ffi::GLfloat>, scale, 1);
         attribute!(program, Geom<ffi::GLfloat>, color, 1);
 
-        #[allow(clippy::cast_precision_loss)]
-        let projection = math::orthographic(0.0, width as f32, height as f32, 0.0, -1.0, 1.0);
-
-        #[allow(clippy::cast_precision_loss)]
-        let view = math::translate_rotate(
-            math::Vec2 {
-                x: (width as f32) / 2.0,
-                y: (height as f32) / 2.0,
-            },
-            0.0,
-        );
-
-        ffi::glUniformMatrix4fv(
-            ffi::glGetUniformLocation(program, c"projection".as_ptr().cast::<ffi::GLchar>()),
-            1,
-            ffi::GL_FALSE,
-            projection.as_ptr().cast::<ffi::GLfloat>(),
-        );
-        ffi::glUniformMatrix4fv(
-            ffi::glGetUniformLocation(program, c"view".as_ptr().cast::<ffi::GLchar>()),
-            1,
-            ffi::GL_FALSE,
-            view.as_ptr().cast::<ffi::GLfloat>(),
-        );
+        uniform!(program, projection);
+        uniform!(program, view);
 
         let mut now = time::Instant::now();
         let mut frames = 0;
 
-        let vertices_len = vertices.len().try_into().unwrap();
-        let geoms_size = (mem::size_of::<Geom<ffi::GLfloat>>() * geoms.len())
-            .try_into()
-            .unwrap();
-        let geoms_len = geoms.len().try_into().unwrap();
-
         let mut speed: math::Vec2<f32> = math::Vec2::default();
-
-        let run: math::Vec2<f32> = 3.5.into();
-        let drag: math::Vec2<f32> = 0.8125.into();
 
         println!("\n");
         while ffi::glfwWindowShouldClose(window) != 1 {
@@ -327,22 +333,28 @@ fn main() {
             if ffi::glfwGetKey(window, ffi::GLFW_KEY_D) == ffi::GLFW_PRESS {
                 r#move.x += 1.0;
             }
-            r#move.normalize();
+            math::turn(&mut r#move, math::Vec2::default(), view_rotate);
+            math::normalize(&mut r#move);
 
-            speed += r#move * run;
-            speed *= drag;
+            speed += r#move * accel.into();
+            speed *= drag.into();
             geoms[0].translate += speed;
 
             ffi::glClear(ffi::GL_COLOR_BUFFER_BIT);
-
             ffi::glBufferSubData(
                 ffi::GL_ARRAY_BUFFER,
                 0,
-                geoms_size,
+                (mem::size_of::<Geom<ffi::GLfloat>>() * geoms.len())
+                    .try_into()
+                    .unwrap(),
                 geoms.as_ptr().cast::<c_void>(),
             );
-            ffi::glDrawArraysInstanced(ffi::GL_TRIANGLE_STRIP, 0, vertices_len, geoms_len);
-
+            ffi::glDrawArraysInstanced(
+                ffi::GL_TRIANGLE_STRIP,
+                0,
+                vertices.len().try_into().unwrap(),
+                geoms.len().try_into().unwrap(),
+            );
             ffi::glfwSwapBuffers(window);
 
             frames += 1;

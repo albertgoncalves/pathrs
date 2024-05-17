@@ -14,28 +14,36 @@ pub struct Vec3<T> {
 
 type Mat4<T> = [[T; 4]; 4];
 
-pub trait Normalize {
-    fn normalize(&mut self);
-}
-
-impl Normalize for Vec2<f32> {
-    fn normalize(&mut self) {
-        let len = self.x.hypot(self.y) + f32::EPSILON;
-        self.x /= len;
-        self.y /= len;
-    }
-}
-
 impl From<f32> for Vec2<f32> {
     fn from(value: f32) -> Self {
         Self { x: value, y: value }
     }
 }
 
+impl From<f32> for Vec3<f32> {
+    fn from(value: f32) -> Self {
+        Self {
+            x: value,
+            y: value,
+            z: value,
+        }
+    }
+}
+
+impl std::ops::Add for Vec2<f32> {
+    type Output = Self;
+
+    fn add(self, other: Self) -> Self {
+        Self {
+            x: self.x + other.x,
+            y: self.y + other.y,
+        }
+    }
+}
+
 impl std::ops::AddAssign for Vec2<f32> {
     fn add_assign(&mut self, other: Self) {
-        self.x += other.x;
-        self.y += other.y;
+        *self = *self + other;
     }
 }
 
@@ -52,9 +60,23 @@ impl std::ops::Mul for Vec2<f32> {
 
 impl std::ops::MulAssign for Vec2<f32> {
     fn mul_assign(&mut self, other: Self) {
-        self.x *= other.x;
-        self.y *= other.y;
+        *self = *self * other;
     }
+}
+
+pub fn normalize(vec: &mut Vec2<f32>) {
+    let len = vec.x.hypot(vec.y) + f32::EPSILON;
+    vec.x /= len;
+    vec.y /= len;
+}
+
+pub fn turn(to: &mut Vec2<f32>, from: Vec2<f32>, radians: f32) {
+    let x = to.x - from.x;
+    let y = to.y - from.y;
+    let s = radians.sin();
+    let c = radians.cos();
+    to.x = y.mul_add(s, x.mul_add(c, from.x));
+    to.y = y.mul_add(c, x.mul_add(-s, from.y));
 }
 
 pub fn orthographic(

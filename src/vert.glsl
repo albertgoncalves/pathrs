@@ -12,6 +12,6 @@ out vec3 color_vert;
 
 void main() {
     gl_Position =
-        projection * view * vec4((position * scale) + translate, 0.0f, 1.0f);
+        projection * view * vec4((position * scale) + translate, 0.0, 1.0);
     color_vert = color;
 }
