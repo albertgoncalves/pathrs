@@ -1,7 +1,11 @@
 *
 !.gitignore
-!rustfmt.toml
+
 !Makefile
+
+!rustfmt.toml
+!.clang-format
+
 !src/
 !*.rs
 !*.glsl

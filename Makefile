@@ -7,6 +7,7 @@ RUSTC = \
 	-C opt-level=3 \
 	-C overflow-checks=yes \
 	-C panic=unwind \
+	-C target-cpu=native \
 	-W absolute-paths-not-starting-with-crate \
 	-W anonymous-parameters \
 	-W deprecated-in-future \

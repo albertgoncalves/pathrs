@@ -4,6 +4,7 @@ mod math;
 mod prelude;
 
 use crate::defer::Defer;
+use crate::math::{Distance, Normalize};
 use std::convert::TryInto;
 use std::ffi::{c_char, c_int, c_void, CStr, CString};
 use std::fs::read_to_string;
@@ -18,7 +19,7 @@ use std::time;
 struct Geom<T> {
     translate: math::Vec2<T>,
     scale: math::Vec2<T>,
-    color: math::Vec3<T>,
+    color: math::Vec4<T>,
 }
 
 extern "C" fn callback_glfw_error(error_code: c_int, description: *const c_char) {
@@ -133,9 +134,7 @@ macro_rules! attribute {
         ffi::glEnableVertexAttribArray(index);
         ffi::glVertexAttribPointer(
             index,
-            (mem::size_of::<$ty>() / mem::size_of::<ffi::GLfloat>())
-                .try_into()
-                .unwrap(),
+            (mem::size_of::<$ty>() / mem::size_of::<ffi::GLfloat>()).try_into().unwrap(),
             ffi::GL_FLOAT,
             ffi::GL_FALSE,
             (mem::size_of::<$ty>()).try_into().unwrap(),
@@ -171,7 +170,7 @@ macro_rules! uniform {
             ),
             1,
             ffi::GL_FALSE,
-            $ident.as_ptr().cast::<ffi::GLfloat>(),
+            $ident.0.as_ptr().cast::<ffi::GLfloat>(),
         );
     };
 }
@@ -230,41 +229,59 @@ fn main() {
     let window_width = 1400;
     let window_height = 900;
 
-    let view_zoom = 1.5;
+    let view_from = math::Vec3 {
+        x: 0.0,
+        y: 0.0,
+        z: 625.0,
+    };
+    let view_to = math::Vec3::default();
+    let view_distance = view_from.distance(view_to);
+
+    let view_up = math::Vec3 {
+        x: 0.0,
+        y: 1.0,
+        z: 0.0,
+    };
 
     #[allow(clippy::cast_precision_loss)]
-    let view_translate = math::Vec2 {
-        x: ((window_width / 2) as f32) / view_zoom,
-        y: ((window_height / 2) as f32) / view_zoom,
-    };
-    let mut view_rotate = std::f32::consts::PI;
+    let projection = math::perspective(
+        45.0,
+        (window_width as f32) / (window_height as f32),
+        view_distance - 0.1,
+        view_distance + 0.1,
+    );
+    let view = math::look_at(view_from, view_to, view_up);
 
     let acceleration = 3.125;
     let drag = 0.81125;
-    let spin = 0.005;
 
-    let background_color = math::Vec3 {
+    let mut speed: math::Vec2<f32> = math::Vec2::default();
+
+    let background_color = math::Vec4 {
         x: 0.1,
         y: 0.09,
         z: 0.11,
+        w: 1.0,
     };
 
     let mut quads = [Geom {
         translate: math::Vec2::default(),
         scale: 25.0.into(),
-        color: math::Vec3 {
+        color: math::Vec4 {
             x: 1.0,
             y: 0.5,
             z: 0.75,
+            w: 0.9,
         },
     }];
     let mut lines = [Geom {
         translate: math::Vec2::default(),
-        scale: 1000.0.into(),
-        color: math::Vec3 {
+        scale: math::Vec2 { x: 250.0, y: 500.0 },
+        color: math::Vec4 {
             x: 0.75,
             y: 0.1,
             z: 0.25,
+            w: 0.5,
         },
     }];
 
@@ -279,25 +296,10 @@ fn main() {
         math::Vec2 { x: 0.5, y: 0.5 },
     ];
 
-    let line_width = 5.0;
-
-    #[allow(clippy::cast_precision_loss)]
-    let projection = math::orthographic(
-        0.0,
-        (window_width as f32) / view_zoom,
-        (window_height as f32) / view_zoom,
-        0.0,
-        -1.0,
-        1.0,
-    );
+    let line_width = 2.5;
 
     unsafe {
-        println!(
-            "{}",
-            CStr::from_ptr(ffi::glfwGetVersionString())
-                .to_str()
-                .unwrap(),
-        );
+        println!("{}", CStr::from_ptr(ffi::glfwGetVersionString()).to_str().unwrap());
 
         ffi::glfwSetErrorCallback(callback_glfw_error);
 
@@ -336,7 +338,12 @@ fn main() {
 
         ffi::glEnable(ffi::GL_BLEND);
         ffi::glBlendFunc(ffi::GL_SRC_ALPHA, ffi::GL_ONE_MINUS_SRC_ALPHA);
-        ffi::glClearColor(background_color.x, background_color.y, background_color.z, 1.0);
+        ffi::glClearColor(
+            background_color.x,
+            background_color.y,
+            background_color.z,
+            background_color.w,
+        );
         ffi::glEnable(ffi::GL_MULTISAMPLE);
         ffi::glViewport(0, 0, window_width, window_height);
 
@@ -363,14 +370,13 @@ fn main() {
         ffi::glEnable(ffi::GL_LINE_SMOOTH);
 
         uniform!(program, projection);
+        uniform!(program, view);
 
         buffers_and_attributes(program, vao[0], vbo[0], instance_vbo[0], &quads, &quad_vertices);
         buffers_and_attributes(program, vao[1], vbo[1], instance_vbo[1], &lines, &line_vertices);
 
         let mut now = time::Instant::now();
         let mut frames = 0;
-
-        let mut speed: math::Vec2<f32> = math::Vec2::default();
 
         println!("\n");
         while ffi::glfwWindowShouldClose(window) != 1 {
@@ -389,10 +395,10 @@ fn main() {
 
             let mut r#move: math::Vec2<f32> = math::Vec2::default();
             if pressed(window, ffi::GLFW_KEY_W) {
-                r#move.y -= 1.0;
+                r#move.y += 1.0;
             }
             if pressed(window, ffi::GLFW_KEY_S) {
-                r#move.y += 1.0;
+                r#move.y -= 1.0;
             }
             if pressed(window, ffi::GLFW_KEY_A) {
                 r#move.x -= 1.0;
@@ -400,18 +406,12 @@ fn main() {
             if pressed(window, ffi::GLFW_KEY_D) {
                 r#move.x += 1.0;
             }
-            math::turn(&mut r#move, math::Vec2::default(), view_rotate);
-            math::normalize(&mut r#move);
+            r#move = r#move.normalize();
 
-            speed += r#move * acceleration.into();
-            speed *= drag.into();
+            speed += r#move * acceleration;
+            speed *= drag;
             quads[0].translate += speed;
             lines[0].translate += speed;
-
-            view_rotate += spin;
-            // TODO: This doesn't spin correctly.
-            let view = math::translate_and_rotate(view_translate, view_rotate);
-            uniform!(program, view);
 
             ffi::glClear(ffi::GL_COLOR_BUFFER_BIT);
 
