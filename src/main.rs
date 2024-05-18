@@ -232,7 +232,7 @@ fn main() {
     let mut view_from = math::Vec3 {
         x: 0.0,
         y: 0.0,
-        z: 625.0,
+        z: 800.0,
     };
     let mut view_to = math::Vec3::default();
     let view_distance = view_from.distance(view_to);
@@ -251,11 +251,11 @@ fn main() {
         view_distance + 0.1,
     );
 
-    let player_acceleration = 3.125;
-    let player_drag = 0.81125;
+    let player_acceleration = 2.825;
+    let player_drag = 0.8;
     let mut player_speed: math::Vec2<f32> = math::Vec2::default();
 
-    let camera_latency = 0.025;
+    let camera_latency = 0.0225;
 
     let background_color = math::Vec4 {
         x: 0.1,
@@ -288,7 +288,7 @@ fn main() {
     ];
     let player_index = quads.len() - 1;
 
-    let mut lines = [Geom {
+    let lines = [Geom {
         translate: math::Vec2::default(),
         scale: math::Vec2 { x: 250.0, y: 500.0 },
         color: math::Vec4 {
@@ -424,7 +424,6 @@ fn main() {
             player_speed += r#move * player_acceleration;
             player_speed *= player_drag;
             quads[player_index].translate += player_speed;
-            lines[0].translate += player_speed;
 
             let mut camera = math::Vec2 {
                 x: view_from.x,

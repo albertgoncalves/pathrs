@@ -92,16 +92,6 @@ pub struct Vec3<T> {
     pub z: T,
 }
 
-impl From<f32> for Vec3<f32> {
-    fn from(value: f32) -> Self {
-        Self {
-            x: value,
-            y: value,
-            z: value,
-        }
-    }
-}
-
 impl std::ops::Sub for Vec3<f32> {
     type Output = Self;
 
