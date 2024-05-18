@@ -39,6 +39,17 @@ impl std::ops::AddAssign for Vec2<f32> {
     }
 }
 
+impl std::ops::Sub for Vec2<f32> {
+    type Output = Self;
+
+    fn sub(self, other: Self) -> Self {
+        Self {
+            x: self.x - other.x,
+            y: self.y - other.y,
+        }
+    }
+}
+
 impl std::ops::Mul for Vec2<f32> {
     type Output = Self;
 

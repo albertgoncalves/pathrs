@@ -229,12 +229,12 @@ fn main() {
     let window_width = 1400;
     let window_height = 900;
 
-    let view_from = math::Vec3 {
+    let mut view_from = math::Vec3 {
         x: 0.0,
         y: 0.0,
         z: 625.0,
     };
-    let view_to = math::Vec3::default();
+    let mut view_to = math::Vec3::default();
     let view_distance = view_from.distance(view_to);
 
     let view_up = math::Vec3 {
@@ -250,12 +250,12 @@ fn main() {
         view_distance - 0.1,
         view_distance + 0.1,
     );
-    let view = math::look_at(view_from, view_to, view_up);
 
-    let acceleration = 3.125;
-    let drag = 0.81125;
+    let player_acceleration = 3.125;
+    let player_drag = 0.81125;
+    let mut player_speed: math::Vec2<f32> = math::Vec2::default();
 
-    let mut speed: math::Vec2<f32> = math::Vec2::default();
+    let camera_latency = 0.025;
 
     let background_color = math::Vec4 {
         x: 0.1,
@@ -264,16 +264,30 @@ fn main() {
         w: 1.0,
     };
 
-    let mut quads = [Geom {
-        translate: math::Vec2::default(),
-        scale: 25.0.into(),
-        color: math::Vec4 {
-            x: 1.0,
-            y: 0.5,
-            z: 0.75,
-            w: 0.9,
+    let mut quads = [
+        Geom {
+            translate: math::Vec2::default(),
+            scale: math::Vec2 { x: 625.0, y: 625.0 },
+            color: math::Vec4 {
+                x: 0.325,
+                y: 0.375,
+                z: 0.525,
+                w: 1.0,
+            },
         },
-    }];
+        Geom {
+            translate: math::Vec2::default(),
+            scale: 25.0.into(),
+            color: math::Vec4 {
+                x: 1.0,
+                y: 0.5,
+                z: 0.75,
+                w: 1.0,
+            },
+        },
+    ];
+    let player_index = quads.len() - 1;
+
     let mut lines = [Geom {
         translate: math::Vec2::default(),
         scale: math::Vec2 { x: 250.0, y: 500.0 },
@@ -370,7 +384,6 @@ fn main() {
         ffi::glEnable(ffi::GL_LINE_SMOOTH);
 
         uniform!(program, projection);
-        uniform!(program, view);
 
         buffers_and_attributes(program, vao[0], vbo[0], instance_vbo[0], &quads, &quad_vertices);
         buffers_and_attributes(program, vao[1], vbo[1], instance_vbo[1], &lines, &line_vertices);
@@ -408,10 +421,25 @@ fn main() {
             }
             r#move = r#move.normalize();
 
-            speed += r#move * acceleration;
-            speed *= drag;
-            quads[0].translate += speed;
-            lines[0].translate += speed;
+            player_speed += r#move * player_acceleration;
+            player_speed *= player_drag;
+            quads[player_index].translate += player_speed;
+            lines[0].translate += player_speed;
+
+            let mut camera = math::Vec2 {
+                x: view_from.x,
+                y: view_from.y,
+            };
+            camera += (quads[player_index].translate - camera) * camera_latency;
+
+            view_from.x = camera.x;
+            view_from.y = camera.y;
+
+            view_to.x = camera.x;
+            view_to.y = camera.y;
+
+            let view = math::look_at(view_from, view_to, view_up);
+            uniform!(program, view);
 
             ffi::glClear(ffi::GL_COLOR_BUFFER_BIT);
 
