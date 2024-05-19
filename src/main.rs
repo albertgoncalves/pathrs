@@ -229,19 +229,11 @@ fn main() {
     let window_width = 1400;
     let window_height = 900;
 
-    let mut view_from = math::Vec3 {
-        x: 0.0,
-        y: 0.0,
-        z: 800.0,
-    };
+    let mut view_from = math::Vec3 { x: 0.0, y: 0.0, z: 800.0 };
     let mut view_to = math::Vec3::default();
     let view_distance = view_from.distance(view_to);
 
-    let view_up = math::Vec3 {
-        x: 0.0,
-        y: 1.0,
-        z: 0.0,
-    };
+    let view_up = math::Vec3 { x: 0.0, y: 1.0, z: 0.0 };
 
     #[allow(clippy::cast_precision_loss)]
     let projection = math::perspective(
@@ -288,9 +280,12 @@ fn main() {
     ];
     let player_index = quads.len() - 1;
 
-    let lines = [Geom {
-        translate: math::Vec2::default(),
-        scale: math::Vec2 { x: 250.0, y: 500.0 },
+    let a = math::Vec2 { x: -100.0, y: -100.0 };
+    let mut b = math::Vec2 { x: 100.0, y: 100.0 };
+
+    let mut lines = [Geom {
+        translate: (a * 0.5) + (b * 0.5),
+        scale: a - b,
         color: math::Vec4 {
             x: 0.75,
             y: 0.1,
@@ -436,6 +431,10 @@ fn main() {
 
             view_to.x = camera.x;
             view_to.y = camera.y;
+
+            b = math::rotate(b, a, 0.005);
+            lines[0].translate = (a * 0.5) + (b * 0.5);
+            lines[0].scale = a - b;
 
             let view = math::look_at(view_from, view_to, view_up);
             uniform!(program, view);

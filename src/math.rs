@@ -84,6 +84,16 @@ impl std::ops::MulAssign<f32> for Vec2<f32> {
     }
 }
 
+pub fn rotate(to: Vec2<f32>, from: Vec2<f32>, radians: f32) -> Vec2<f32> {
+    let delta = to - from;
+    let sin = radians.sin();
+    let cos = radians.cos();
+    Vec2 {
+        x: delta.y.mul_add(sin, delta.x.mul_add(cos, from.x)),
+        y: delta.y.mul_add(cos, delta.x.mul_add(-sin, from.y)),
+    }
+}
+
 #[repr(C)]
 #[derive(Clone, Copy, Default)]
 pub struct Vec3<T> {
@@ -145,27 +155,27 @@ pub fn perspective(fov: f32, aspect_ratio: f32, near: f32, far: f32) -> Mat4<f32
 }
 
 pub fn look_at(from: Vec3<f32>, to: Vec3<f32>, up: Vec3<f32>) -> Mat4<f32> {
-    let f: Vec3<f32> = (to - from).normalize();
-    let s: Vec3<f32> = f.cross(up).normalize();
-    let u: Vec3<f32> = s.cross(f);
+    let forward: Vec3<f32> = (to - from).normalize();
+    let right: Vec3<f32> = forward.cross(up).normalize();
+    let up: Vec3<f32> = right.cross(forward);
 
     let mut mat = Mat4::default();
 
-    mat.0[0][0] = s.x;
-    mat.0[0][1] = u.x;
-    mat.0[0][2] = -f.x;
+    mat.0[0][0] = right.x;
+    mat.0[0][1] = up.x;
+    mat.0[0][2] = -forward.x;
 
-    mat.0[1][0] = s.y;
-    mat.0[1][1] = u.y;
-    mat.0[1][2] = -f.y;
+    mat.0[1][0] = right.y;
+    mat.0[1][1] = up.y;
+    mat.0[1][2] = -forward.y;
 
-    mat.0[2][0] = s.z;
-    mat.0[2][1] = u.z;
-    mat.0[2][2] = -f.z;
+    mat.0[2][0] = right.z;
+    mat.0[2][1] = up.z;
+    mat.0[2][2] = -forward.z;
 
-    mat.0[3][0] = -s.dot(from);
-    mat.0[3][1] = -u.dot(from);
-    mat.0[3][2] = f.dot(from);
+    mat.0[3][0] = -right.dot(from);
+    mat.0[3][1] = -up.dot(from);
+    mat.0[3][2] = forward.dot(from);
     mat.0[3][3] = 1.0;
 
     mat
