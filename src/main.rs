@@ -1,10 +1,12 @@
 mod defer;
 mod ffi;
+mod geom;
 mod math;
 mod prelude;
 
 use crate::defer::Defer;
-use crate::math::{Distance, Normalize};
+use crate::geom::{Geom, Line};
+use crate::math::{Distance, Normalize, Rotate};
 use std::convert::TryInto;
 use std::ffi::{c_char, c_int, c_void, CStr, CString};
 use std::fs::read_to_string;
@@ -14,13 +16,6 @@ use std::ptr;
 use std::slice::from_raw_parts;
 use std::str::from_utf8_unchecked;
 use std::time;
-
-#[repr(C)]
-struct Geom<T> {
-    translate: math::Vec2<T>,
-    scale: math::Vec2<T>,
-    color: math::Vec4<T>,
-}
 
 extern "C" fn callback_glfw_error(error_code: c_int, description: *const c_char) {
     let mut message = error_code.to_string();
@@ -247,7 +242,9 @@ fn main() {
     let player_drag = 0.8;
     let mut player_speed: math::Vec2<f32> = math::Vec2::default();
 
-    let camera_latency = 0.0225;
+    let camera_latency = 0.02325;
+
+    let spin = 0.005;
 
     let background_color = math::Vec4 {
         x: 0.1,
@@ -258,40 +255,41 @@ fn main() {
 
     let mut quads = [
         Geom {
-            translate: math::Vec2::default(),
-            scale: math::Vec2 { x: 625.0, y: 625.0 },
+            translate: math::Vec2::default().into(),
+            scale: math::Vec2 { x: 625.0, y: 625.0 }.into(),
             color: math::Vec4 {
                 x: 0.325,
                 y: 0.375,
                 z: 0.525,
-                w: 1.0,
-            },
+                w: 0.25,
+            }
+            .into(),
         },
         Geom {
-            translate: math::Vec2::default(),
+            translate: math::Vec2::default().into(),
             scale: 25.0.into(),
             color: math::Vec4 {
                 x: 1.0,
                 y: 0.5,
                 z: 0.75,
                 w: 1.0,
-            },
+            }
+            .into(),
         },
     ];
     let player_index = quads.len() - 1;
 
-    let a = math::Vec2 { x: -100.0, y: -100.0 };
-    let mut b = math::Vec2 { x: 100.0, y: 100.0 };
-
+    let mut line = Line(math::Vec2 { x: -100.0, y: -100.0 }, math::Vec2 { x: 100.0, y: 100.0 });
     let mut lines = [Geom {
-        translate: (a * 0.5) + (b * 0.5),
-        scale: a - b,
+        translate: line.into(),
+        scale: line.into(),
         color: math::Vec4 {
             x: 0.75,
             y: 0.1,
             z: 0.25,
             w: 0.5,
-        },
+        }
+        .into(),
     }];
 
     let quad_vertices = [
@@ -418,13 +416,13 @@ fn main() {
 
             player_speed += r#move * player_acceleration;
             player_speed *= player_drag;
-            quads[player_index].translate += player_speed;
+            quads[player_index].translate.0 += player_speed;
 
             let mut camera = math::Vec2 {
                 x: view_from.x,
                 y: view_from.y,
             };
-            camera += (quads[player_index].translate - camera) * camera_latency;
+            camera += (quads[player_index].translate.0 - camera) * camera_latency;
 
             view_from.x = camera.x;
             view_from.y = camera.y;
@@ -432,9 +430,9 @@ fn main() {
             view_to.x = camera.x;
             view_to.y = camera.y;
 
-            b = math::rotate(b, a, 0.005);
-            lines[0].translate = (a * 0.5) + (b * 0.5);
-            lines[0].scale = a - b;
+            line.0.rotate(line.1, spin);
+            lines[0].translate = line.into();
+            lines[0].scale = line.into();
 
             let view = math::look_at(view_from, view_to, view_up);
             uniform!(program, view);
