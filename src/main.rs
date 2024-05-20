@@ -6,8 +6,9 @@ mod prelude;
 
 use crate::defer::Defer;
 use crate::geom::{Geom, Line};
-use crate::math::{Distance, Normalize, Rotate};
+use crate::math::{Distance, Normalize};
 use std::convert::TryInto;
+use std::f32::consts::PI;
 use std::ffi::{c_char, c_int, c_void, CStr, CString};
 use std::fs::read_to_string;
 use std::mem;
@@ -221,10 +222,12 @@ fn pressed(window: *mut ffi::GLFWwindow, key: c_int) -> bool {
 }
 
 fn main() {
+    const LINES_LEN: usize = 3;
+
     let window_width = 1400;
     let window_height = 900;
 
-    let mut view_from = math::Vec3 { x: 0.0, y: 0.0, z: 800.0 };
+    let mut view_from = math::Vec3 { x: 0.0, y: 0.0, z: 600.0 };
     let mut view_to = math::Vec3::default();
     let view_distance = view_from.distance(view_to);
 
@@ -244,8 +247,6 @@ fn main() {
 
     let camera_latency = 0.02325;
 
-    let spin = 0.005;
-
     let background_color = math::Vec4 {
         x: 0.1,
         y: 0.09,
@@ -253,10 +254,10 @@ fn main() {
         w: 1.0,
     };
 
-    let mut quads = [
+    let mut quad_geoms = [
         Geom {
             translate: math::Vec2::default().into(),
-            scale: math::Vec2 { x: 625.0, y: 625.0 }.into(),
+            scale: math::Vec2 { x: 600.0, y: 600.0 }.into(),
             color: math::Vec4 {
                 x: 0.325,
                 y: 0.375,
@@ -277,20 +278,27 @@ fn main() {
             .into(),
         },
     ];
-    let player_index = quads.len() - 1;
+    let player_index = quad_geoms.len() - 1;
 
-    let mut line = Line(math::Vec2 { x: -100.0, y: -100.0 }, math::Vec2 { x: 100.0, y: 100.0 });
-    let mut lines = [Geom {
-        translate: line.into(),
-        scale: line.into(),
-        color: math::Vec4 {
-            x: 0.75,
-            y: 0.1,
-            z: 0.25,
-            w: 0.5,
-        }
-        .into(),
-    }];
+    let lines: [Line<f32>; LINES_LEN] = [
+        Line::new(math::Vec2 { x: -100.0, y: -200.0 }, 250.0, PI / 2.0),
+        Line::new(math::Vec2 { x: -100.0, y: 50.0 }, 300.0, 0.0),
+        Line::new(math::Vec2 { x: 100.0, y: -300.0 }, 200.0, PI / 2.0),
+    ];
+    let mut line_geoms = [Geom::default(); LINES_LEN];
+    for (i, line) in lines.into_iter().enumerate() {
+        line_geoms[i] = Geom {
+            translate: line.into(),
+            scale: line.into(),
+            color: math::Vec4 {
+                x: 0.75,
+                y: 0.1,
+                z: 0.25,
+                w: 0.375,
+            }
+            .into(),
+        };
+    }
 
     let quad_vertices = [
         math::Vec2 { x: 0.5, y: 0.5 },
@@ -303,7 +311,7 @@ fn main() {
         math::Vec2 { x: 0.5, y: 0.5 },
     ];
 
-    let line_width = 2.5;
+    let line_width = 2.0;
 
     unsafe {
         println!("{}", CStr::from_ptr(ffi::glfwGetVersionString()).to_str().unwrap());
@@ -378,8 +386,22 @@ fn main() {
 
         uniform!(program, projection);
 
-        buffers_and_attributes(program, vao[0], vbo[0], instance_vbo[0], &quads, &quad_vertices);
-        buffers_and_attributes(program, vao[1], vbo[1], instance_vbo[1], &lines, &line_vertices);
+        buffers_and_attributes(
+            program,
+            vao[0],
+            vbo[0],
+            instance_vbo[0],
+            &quad_geoms,
+            &quad_vertices,
+        );
+        buffers_and_attributes(
+            program,
+            vao[1],
+            vbo[1],
+            instance_vbo[1],
+            &line_geoms,
+            &line_vertices,
+        );
 
         let mut now = time::Instant::now();
         let mut frames = 0;
@@ -416,13 +438,13 @@ fn main() {
 
             player_speed += r#move * player_acceleration;
             player_speed *= player_drag;
-            quads[player_index].translate.0 += player_speed;
+            quad_geoms[player_index].translate.0 += player_speed;
 
             let mut camera = math::Vec2 {
                 x: view_from.x,
                 y: view_from.y,
             };
-            camera += (quads[player_index].translate.0 - camera) * camera_latency;
+            camera += (quad_geoms[player_index].translate.0 - camera) * camera_latency;
 
             view_from.x = camera.x;
             view_from.y = camera.y;
@@ -430,17 +452,19 @@ fn main() {
             view_to.x = camera.x;
             view_to.y = camera.y;
 
-            line.0.rotate(line.1, spin);
-            lines[0].translate = line.into();
-            lines[0].scale = line.into();
-
             let view = math::look_at(view_from, view_to, view_up);
             uniform!(program, view);
 
             ffi::glClear(ffi::GL_COLOR_BUFFER_BIT);
 
-            bind_and_draw(vao[0], instance_vbo[0], &quads, &quad_vertices, ffi::GL_TRIANGLE_STRIP);
-            bind_and_draw(vao[1], instance_vbo[1], &lines, &line_vertices, ffi::GL_LINES);
+            bind_and_draw(
+                vao[0],
+                instance_vbo[0],
+                &quad_geoms,
+                &quad_vertices,
+                ffi::GL_TRIANGLE_STRIP,
+            );
+            bind_and_draw(vao[1], instance_vbo[1], &line_geoms, &line_vertices, ffi::GL_LINES);
 
             ffi::glfwSwapBuffers(window);
 
