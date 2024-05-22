@@ -6,9 +6,8 @@ mod prelude;
 
 use crate::defer::Defer;
 use crate::geom::{Geom, Line};
-use crate::math::{Distance, Normalize};
+use crate::math::{Dot, Normalize};
 use std::convert::TryInto;
-use std::f32::consts::PI;
 use std::ffi::{c_char, c_int, c_void, CStr, CString};
 use std::fs::read_to_string;
 use std::mem;
@@ -222,16 +221,18 @@ fn pressed(window: *mut ffi::GLFWwindow, key: c_int) -> bool {
 }
 
 fn main() {
-    const LINES_LEN: usize = 3;
-
     let window_width = 1400;
     let window_height = 900;
 
-    let mut view_from = math::Vec3 { x: 0.0, y: 0.0, z: 600.0 };
-    let mut view_to = math::Vec3::default();
-    let view_distance = view_from.distance(view_to);
-
+    let view_distance = 600.0;
     let view_up = math::Vec3 { x: 0.0, y: 1.0, z: 0.0 };
+
+    let mut camera = math::Vec3 {
+        x: 0.0,
+        y: 0.0,
+        z: view_distance,
+    };
+    let camera_latency = 0.02325;
 
     #[allow(clippy::cast_precision_loss)]
     let projection = math::perspective(
@@ -240,21 +241,58 @@ fn main() {
         view_distance - 0.1,
         view_distance + 0.1,
     );
+    let inverse_projection = math::inverse_perspective(&projection);
 
-    let player_acceleration = 2.825;
-    let player_drag = 0.8;
+    let player_acceleration = 2.5;
+    let player_drag = 0.775;
+
     let mut player_speed: math::Vec2<f32> = math::Vec2::default();
 
-    let camera_latency = 0.02325;
+    let player_quad_scale = 25.0;
+    let player_line_scale = 6.75;
 
+    let waypoint_scale = 15.0;
+
+    let player_quad_color = math::Vec4 {
+        x: 1.0,
+        y: 0.5,
+        z: 0.75,
+        w: 1.0,
+    };
+    let player_line_color = math::Vec4 {
+        w: 0.375,
+        ..player_quad_color
+    };
+    let cursor_line_color = math::Vec4 {
+        w: 0.15,
+        ..player_quad_color
+    };
     let background_color = math::Vec4 {
         x: 0.1,
         y: 0.09,
         z: 0.11,
         w: 1.0,
     };
+    let wall_color = math::Vec4 {
+        x: 1.0,
+        y: 1.0,
+        z: 1.0,
+        w: 0.9,
+    };
+    let path_color = math::Vec4 {
+        x: 0.6,
+        y: 0.85,
+        z: 0.9,
+        w: 0.0375,
+    };
+    let waypoint_color = math::Vec4 {
+        x: 0.4,
+        y: 0.875,
+        z: 0.9,
+        w: 0.2,
+    };
 
-    let mut quad_geoms = [
+    let mut quads = [
         Geom {
             translate: math::Vec2::default().into(),
             scale: math::Vec2 { x: 600.0, y: 600.0 }.into(),
@@ -267,38 +305,147 @@ fn main() {
             .into(),
         },
         Geom {
+            translate: math::Vec2 { x: 50.0, y: 50.0 }.into(),
+            scale: math::Vec2 { x: 310.0, y: 10.0 }.into(),
+            color: wall_color.into(),
+        },
+        Geom {
+            translate: math::Vec2 { x: -100.0, y: -75.0 }.into(),
+            scale: math::Vec2 { x: 10.0, y: 260.0 }.into(),
+            color: wall_color.into(),
+        },
+        Geom {
+            translate: math::Vec2 { x: 200.0, y: 125.0 }.into(),
+            scale: math::Vec2 { x: 10.0, y: 160.0 }.into(),
+            color: wall_color.into(),
+        },
+        Geom {
+            translate: math::Vec2 { x: -150.0, y: -200.0 }.into(),
+            scale: math::Vec2 { x: 110.0, y: 10.0 }.into(),
+            color: wall_color.into(),
+        },
+        Geom {
+            translate: math::Vec2 { x: -50.0, y: 0.0 }.into(),
+            scale: waypoint_scale.into(),
+            color: waypoint_color.into(),
+        },
+        Geom {
+            translate: math::Vec2 { x: 250.0, y: 0.0 }.into(),
+            scale: waypoint_scale.into(),
+            color: waypoint_color.into(),
+        },
+        Geom {
+            translate: math::Vec2 { x: 250.0, y: 250.0 }.into(),
+            scale: waypoint_scale.into(),
+            color: waypoint_color.into(),
+        },
+        Geom {
+            translate: math::Vec2 { x: 150.0, y: 250.0 }.into(),
+            scale: waypoint_scale.into(),
+            color: waypoint_color.into(),
+        },
+        Geom {
+            translate: math::Vec2 { x: 150.0, y: 100.0 }.into(),
+            scale: waypoint_scale.into(),
+            color: waypoint_color.into(),
+        },
+        Geom {
+            translate: math::Vec2 { x: -150.0, y: 100.0 }.into(),
+            scale: waypoint_scale.into(),
+            color: waypoint_color.into(),
+        },
+        Geom {
+            translate: math::Vec2 { x: -150.0, y: -150.0 }.into(),
+            scale: waypoint_scale.into(),
+            color: waypoint_color.into(),
+        },
+        Geom {
+            translate: math::Vec2 { x: -250.0, y: -150.0 }.into(),
+            scale: waypoint_scale.into(),
+            color: waypoint_color.into(),
+        },
+        Geom {
+            translate: math::Vec2 { x: -250.0, y: -250.0 }.into(),
+            scale: waypoint_scale.into(),
+            color: waypoint_color.into(),
+        },
+        Geom {
+            translate: math::Vec2 { x: -50.0, y: -250.0 }.into(),
+            scale: waypoint_scale.into(),
+            color: waypoint_color.into(),
+        },
+        Geom {
             translate: math::Vec2::default().into(),
-            scale: 25.0.into(),
-            color: math::Vec4 {
-                x: 1.0,
-                y: 0.5,
-                z: 0.75,
-                w: 1.0,
-            }
-            .into(),
+            scale: player_quad_scale.into(),
+            color: player_quad_color.into(),
         },
     ];
-    let player_index = quad_geoms.len() - 1;
+    let player_quad_index = quads.len() - 1;
 
-    let lines: [Line<f32>; LINES_LEN] = [
-        Line::new(math::Vec2 { x: -100.0, y: -200.0 }, 250.0, PI / 2.0),
-        Line::new(math::Vec2 { x: -100.0, y: 50.0 }, 300.0, 0.0),
-        Line::new(math::Vec2 { x: 100.0, y: -300.0 }, 200.0, PI / 2.0),
+    let mut lines = [
+        Geom {
+            translate: math::Vec2 { x: 100.0, y: 0.0 }.into(),
+            scale: math::Vec2 { x: 310.0, y: 0.0 }.into(),
+            color: path_color.into(),
+        },
+        Geom {
+            translate: math::Vec2 { x: -50.0, y: -125.0 }.into(),
+            scale: math::Vec2 { x: 0.0, y: 260.0 }.into(),
+            color: path_color.into(),
+        },
+        Geom {
+            translate: math::Vec2 { x: 250.0, y: 125.0 }.into(),
+            scale: math::Vec2 { x: 0.0, y: 260.0 }.into(),
+            color: path_color.into(),
+        },
+        Geom {
+            translate: math::Vec2 { x: 200.0, y: 250.0 }.into(),
+            scale: math::Vec2 { x: 110.0, y: 0.0 }.into(),
+            color: path_color.into(),
+        },
+        Geom {
+            translate: math::Vec2 { x: 150.0, y: 175.0 }.into(),
+            scale: math::Vec2 { x: 0.0, y: 160.0 }.into(),
+            color: path_color.into(),
+        },
+        Geom {
+            translate: math::Vec2 { x: 0.0, y: 100.0 }.into(),
+            scale: math::Vec2 { x: 310.0, y: 0.0 }.into(),
+            color: path_color.into(),
+        },
+        Geom {
+            translate: math::Vec2 { x: -150.0, y: -25.0 }.into(),
+            scale: math::Vec2 { x: 0.0, y: 260.0 }.into(),
+            color: path_color.into(),
+        },
+        Geom {
+            translate: math::Vec2 { x: -200.0, y: -150.0 }.into(),
+            scale: math::Vec2 { x: 110.0, y: 0.0 }.into(),
+            color: path_color.into(),
+        },
+        Geom {
+            translate: math::Vec2 { x: -150.0, y: -250.0 }.into(),
+            scale: math::Vec2 { x: 210.0, y: 0.0 }.into(),
+            color: path_color.into(),
+        },
+        Geom {
+            translate: math::Vec2 { x: -250.0, y: -200.0 }.into(),
+            scale: math::Vec2 { x: 0.0, y: 110.0 }.into(),
+            color: path_color.into(),
+        },
+        Geom {
+            translate: math::Vec2::default().into(),
+            scale: math::Vec2::default().into(),
+            color: cursor_line_color.into(),
+        },
+        Geom {
+            translate: math::Vec2::default().into(),
+            scale: math::Vec2::default().into(),
+            color: player_line_color.into(),
+        },
     ];
-    let mut line_geoms = [Geom::default(); LINES_LEN];
-    for (i, line) in lines.into_iter().enumerate() {
-        line_geoms[i] = Geom {
-            translate: line.into(),
-            scale: line.into(),
-            color: math::Vec4 {
-                x: 0.75,
-                y: 0.1,
-                z: 0.25,
-                w: 0.375,
-            }
-            .into(),
-        };
-    }
+    let cursor_line_index = lines.len() - 2;
+    let player_line_index = lines.len() - 1;
 
     let quad_vertices = [
         math::Vec2 { x: 0.5, y: 0.5 },
@@ -311,7 +458,7 @@ fn main() {
         math::Vec2 { x: 0.5, y: 0.5 },
     ];
 
-    let line_width = 2.0;
+    let line_width = 4.0;
 
     unsafe {
         println!("{}", CStr::from_ptr(ffi::glfwGetVersionString()).to_str().unwrap());
@@ -386,34 +533,28 @@ fn main() {
 
         uniform!(program, projection);
 
-        buffers_and_attributes(
-            program,
-            vao[0],
-            vbo[0],
-            instance_vbo[0],
-            &quad_geoms,
-            &quad_vertices,
-        );
-        buffers_and_attributes(
-            program,
-            vao[1],
-            vbo[1],
-            instance_vbo[1],
-            &line_geoms,
-            &line_vertices,
-        );
+        buffers_and_attributes(program, vao[0], vbo[0], instance_vbo[0], &quads, &quad_vertices);
+        buffers_and_attributes(program, vao[1], vbo[1], instance_vbo[1], &lines, &line_vertices);
 
+        let mut world_cursor = math::Vec2::default();
         let mut now = time::Instant::now();
         let mut frames = 0;
 
-        println!("\n");
+        println!("\n\n\n\n");
         while ffi::glfwWindowShouldClose(window) != 1 {
-            if 0 < now.elapsed().as_secs() {
+            let elapsed = now.elapsed();
+            if 0 < elapsed.as_secs() {
                 println!(
-                    "\x1B[2A\
-                     {:10} ns/f\n\
-                     {frames:10} frames",
-                    now.elapsed().as_nanos() / frames,
+                    "\x1B[5A\
+                     {:12.2} elapsed ns\n\
+                     {frames:12} frames\n\
+                     {:12} ns / frame\n\
+                     {:12.2} world_cursor.x\n\
+                     {:12.2} world_cursor.y",
+                    elapsed.as_nanos(),
+                    elapsed.as_nanos() / frames,
+                    world_cursor.x,
+                    world_cursor.y,
                 );
                 now = time::Instant::now();
                 frames = 0;
@@ -438,33 +579,56 @@ fn main() {
 
             player_speed += r#move * player_acceleration;
             player_speed *= player_drag;
-            quad_geoms[player_index].translate.0 += player_speed;
+            quads[player_quad_index].translate.0 += player_speed;
 
-            let mut camera = math::Vec2 {
-                x: view_from.x,
-                y: view_from.y,
-            };
-            camera += (quad_geoms[player_index].translate.0 - camera) * camera_latency;
+            let player_line = Line(
+                quads[player_quad_index].translate.0,
+                quads[player_quad_index].translate.0 + (player_speed * player_line_scale),
+            );
 
-            view_from.x = camera.x;
-            view_from.y = camera.y;
+            lines[player_line_index].translate = player_line.into();
+            lines[player_line_index].scale = player_line.into();
 
-            view_to.x = camera.x;
-            view_to.y = camera.y;
+            camera.x += (quads[player_quad_index].translate.0.x - camera.x) * camera_latency;
+            camera.y += (quads[player_quad_index].translate.0.y - camera.y) * camera_latency;
 
-            let view = math::look_at(view_from, view_to, view_up);
+            let view = math::look_at(camera, math::Vec3 { z: 0.0, ..camera }, view_up);
             uniform!(program, view);
+
+            let mut screen_cursor: math::Vec2<f64> = math::Vec2::default();
+            ffi::glfwGetCursorPos(window, &mut screen_cursor.x, &mut screen_cursor.y);
+            screen_cursor.x /= f64::from(window_width);
+            screen_cursor.y /= f64::from(window_height);
+            screen_cursor -= 0.5;
+            screen_cursor *= 2.0;
+            screen_cursor.y = -screen_cursor.y;
+
+            #[allow(clippy::cast_possible_truncation)]
+            let screen_cursor = math::Vec4 {
+                x: screen_cursor.x as f32,
+                y: screen_cursor.y as f32,
+                z: 0.0,
+                w: 1.0,
+            };
+
+            let unprojected_cursor = screen_cursor.dot(&inverse_projection);
+
+            world_cursor = math::Vec2 {
+                x: unprojected_cursor.x,
+                y: unprojected_cursor.y,
+            };
+            world_cursor *= view_distance;
+            world_cursor.x += camera.x;
+            world_cursor.y += camera.y;
+
+            let cursor_line = Line(quads[player_quad_index].translate.0, world_cursor);
+            lines[cursor_line_index].translate = cursor_line.into();
+            lines[cursor_line_index].scale = cursor_line.into();
 
             ffi::glClear(ffi::GL_COLOR_BUFFER_BIT);
 
-            bind_and_draw(
-                vao[0],
-                instance_vbo[0],
-                &quad_geoms,
-                &quad_vertices,
-                ffi::GL_TRIANGLE_STRIP,
-            );
-            bind_and_draw(vao[1], instance_vbo[1], &line_geoms, &line_vertices, ffi::GL_LINES);
+            bind_and_draw(vao[0], instance_vbo[0], &quads, &quad_vertices, ffi::GL_TRIANGLE_STRIP);
+            bind_and_draw(vao[1], instance_vbo[1], &lines, &line_vertices, ffi::GL_LINES);
 
             ffi::glfwSwapBuffers(window);
 

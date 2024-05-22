@@ -1,4 +1,4 @@
-use std::ffi::{c_char, c_float, c_int, c_long, c_uchar, c_uint, c_void};
+use std::ffi::{c_char, c_double, c_float, c_int, c_long, c_uchar, c_uint, c_void};
 use std::marker;
 
 macro_rules! opaque_struct {
@@ -72,6 +72,7 @@ extern "C" {
     pub fn glfwSwapBuffers(window: *mut GLFWwindow);
 
     pub fn glfwGetKey(window: *mut GLFWwindow, key: c_int) -> c_int;
+    pub fn glfwGetCursorPos(window: *mut GLFWwindow, xpos: *mut c_double, ypos: *mut c_double);
 
     // NOTE: See `https://www.khronos.org/opengl/wiki/OpenGL_Error`.
     pub fn glDebugMessageCallback(callback: GLDEBUGPROC, userParam: *const c_void);

@@ -5,6 +5,15 @@ pub struct Vec2<T> {
     pub y: T,
 }
 
+impl From<Vec2<i32>> for Vec2<f64> {
+    fn from(vec: Vec2<i32>) -> Self {
+        Self {
+            x: vec.x.into(),
+            y: vec.y.into(),
+        }
+    }
+}
+
 impl<T: Copy> From<T> for Vec2<T> {
     fn from(value: T) -> Self {
         Self { x: value, y: value }
@@ -51,6 +60,13 @@ impl<T: std::ops::Sub<Output = T>> std::ops::Sub for Vec2<T> {
     }
 }
 
+impl<T: std::ops::SubAssign + Copy> std::ops::SubAssign<T> for Vec2<T> {
+    fn sub_assign(&mut self, other: T) {
+        self.x -= other;
+        self.y -= other;
+    }
+}
+
 impl<T: std::ops::Mul<Output = T>> std::ops::Mul for Vec2<T> {
     type Output = Self;
 
@@ -84,6 +100,13 @@ impl<T: std::ops::MulAssign + Copy> std::ops::MulAssign<T> for Vec2<T> {
     fn mul_assign(&mut self, other: T) {
         self.x *= other;
         self.y *= other;
+    }
+}
+
+impl<T: std::ops::DivAssign> std::ops::DivAssign for Vec2<T> {
+    fn div_assign(&mut self, other: Self) {
+        self.x /= other.x;
+        self.y /= other.y;
     }
 }
 
@@ -128,6 +151,15 @@ pub struct Vec4<T> {
     pub w: T,
 }
 
+impl<T: std::ops::DivAssign + Copy> std::ops::DivAssign<T> for Vec4<T> {
+    fn div_assign(&mut self, other: T) {
+        self.x /= other;
+        self.y /= other;
+        self.z /= other;
+        self.w /= other;
+    }
+}
+
 #[repr(C)]
 #[derive(Clone, Copy, Default)]
 pub struct Mat4<T>(pub [[T; 4]; 4]);
@@ -145,6 +177,18 @@ pub fn perspective(fov: f32, aspect_ratio: f32, near: f32, far: f32) -> Mat4<f32
     mat.0[3][2] = (2.0 * near * far) / (near - far);
 
     mat
+}
+
+pub fn inverse_perspective(mat: &Mat4<f32>) -> Mat4<f32> {
+    let mut inv = Mat4::default();
+
+    inv.0[0][0] = 1.0 / mat.0[0][0];
+    inv.0[1][1] = 1.0 / mat.0[1][1];
+    inv.0[2][3] = 1.0 / mat.0[3][2];
+    inv.0[3][3] = mat.0[2][2] * inv.0[2][3];
+    inv.0[3][2] = mat.0[2][3];
+
+    inv
 }
 
 pub fn look_at(from: Vec3<f32>, to: Vec3<f32>, up: Vec3<f32>) -> Mat4<f32> {
@@ -174,6 +218,30 @@ pub fn look_at(from: Vec3<f32>, to: Vec3<f32>, up: Vec3<f32>) -> Mat4<f32> {
     mat
 }
 
+#[allow(dead_code)]
+pub fn inverse_look_at(mat: &Mat4<f32>) -> Mat4<f32> {
+    let mut inv = Mat4::default();
+
+    inv.0[0][0] = mat.0[0][0];
+    inv.0[0][1] = mat.0[1][0];
+    inv.0[0][2] = mat.0[2][0];
+
+    inv.0[1][0] = mat.0[0][1];
+    inv.0[1][1] = mat.0[1][1];
+    inv.0[1][2] = mat.0[2][1];
+
+    inv.0[2][0] = mat.0[0][2];
+    inv.0[2][1] = mat.0[1][2];
+    inv.0[2][2] = mat.0[2][2];
+
+    inv.0[3][0] = -mat.0[3][0] / (inv.0[0][0] + inv.0[0][1] + inv.0[0][2]);
+    inv.0[3][1] = -mat.0[3][1] / (inv.0[1][0] + inv.0[1][1] + inv.0[1][2]);
+    inv.0[3][2] = -mat.0[3][2] / (inv.0[2][0] + inv.0[2][1] + inv.0[2][2]);
+    inv.0[3][3] = 1.0;
+
+    inv
+}
+
 pub trait Rotate<T> {
     fn rotate(&mut self, center: Self, radians: T);
 }
@@ -188,19 +256,42 @@ impl Rotate<f32> for Vec2<f32> {
     }
 }
 
-trait Dot<T> {
-    fn dot(self, other: Self) -> T;
+pub trait Dot<A, B> {
+    fn dot(self, other: A) -> B;
 }
 
-impl Dot<f32> for Vec2<f32> {
+impl Dot<Self, f32> for Vec2<f32> {
     fn dot(self, other: Self) -> f32 {
-        self.x.mul_add(other.x, self.y * other.y)
+        self.y.mul_add(other.y, self.x * other.x)
     }
 }
 
-impl Dot<f32> for Vec3<f32> {
+impl Dot<Self, f32> for Vec3<f32> {
     fn dot(self, other: Self) -> f32 {
-        self.z.mul_add(other.z, self.x.mul_add(other.x, self.y * other.y))
+        self.z.mul_add(other.z, self.y.mul_add(other.y, self.x * other.x))
+    }
+}
+
+impl Dot<[f32; 4], f32> for Vec4<f32> {
+    fn dot(self, other: [f32; 4]) -> f32 {
+        self.w.mul_add(
+            other[3],
+            self.z.mul_add(other[2], self.y.mul_add(other[1], self.x * other[0])),
+        )
+    }
+}
+
+impl<T: Copy> Dot<&Mat4<T>, Self> for Vec4<T>
+where
+    Self: Dot<[T; 4], T>,
+{
+    fn dot(self, other: &Mat4<T>) -> Self {
+        Self {
+            x: self.dot(other.0[0]),
+            y: self.dot(other.0[1]),
+            z: self.dot(other.0[2]),
+            w: self.dot(other.0[3]),
+        }
     }
 }
 
@@ -222,17 +313,18 @@ pub trait Normalize {
     fn normalize(self) -> Self;
 }
 
-impl<T: Dot<f32> + std::ops::Mul<f32, Output = T> + Copy> Normalize for T {
+impl<T: Dot<T, f32> + std::ops::Mul<f32, Output = T> + Copy> Normalize for T {
     fn normalize(self) -> Self {
         self * (1.0 / (self.dot(self) + f32::EPSILON).sqrt())
     }
 }
 
+#[allow(dead_code)]
 pub trait Distance<T> {
     fn distance(self, other: Self) -> T;
 }
 
-impl<T: Dot<f32> + std::ops::Sub<Output = T> + Copy> Distance<f32> for T {
+impl<T: Dot<T, f32> + std::ops::Sub<Output = T> + Copy> Distance<f32> for T {
     fn distance(self, other: Self) -> f32 {
         let delta: Self = self - other;
         (delta.dot(delta) + f32::EPSILON).sqrt()

@@ -61,6 +61,7 @@ impl From<Line<f32>> for Scale<f32> {
 }
 
 impl Line<f32> {
+    #[allow(dead_code)]
     pub fn new(point: math::Vec2<f32>, length: f32, radians: f32) -> Self {
         let mut line = Self(point, point + math::Vec2 { x: length, y: 0.0 });
         line.1.rotate(point, radians);
