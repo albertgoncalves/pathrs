@@ -574,13 +574,13 @@ fn main() {
             }
             r#move = r#move.normalize();
 
-            player_speed += r#move * player_acceleration;
-            player_speed *= player_drag;
+            player_speed += r#move * player_acceleration.into();
+            player_speed *= player_drag.into();
             quads[player_quad_index].translate.0 += player_speed;
 
             let player_line = Line(
                 quads[player_quad_index].translate.0,
-                quads[player_quad_index].translate.0 + (player_speed * player_line_scale),
+                quads[player_quad_index].translate.0 + (player_speed * player_line_scale.into()),
             );
 
             lines[player_line_index].translate = player_line.into();
@@ -596,8 +596,8 @@ fn main() {
             ffi::glfwGetCursorPos(window, &mut screen_cursor.x, &mut screen_cursor.y);
             screen_cursor.x /= f64::from(window_width);
             screen_cursor.y /= f64::from(window_height);
-            screen_cursor -= 0.5;
-            screen_cursor *= 2.0;
+            screen_cursor -= 0.5.into();
+            screen_cursor *= 2.0.into();
             screen_cursor.y = -screen_cursor.y;
 
             #[allow(clippy::cast_possible_truncation)]
@@ -614,7 +614,7 @@ fn main() {
                 x: unprojected_cursor.x,
                 y: unprojected_cursor.y,
             };
-            world_cursor *= view_distance;
+            world_cursor *= view_distance.into();
             world_cursor.x += camera.x;
             world_cursor.y += camera.y;
 

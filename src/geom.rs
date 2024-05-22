@@ -49,7 +49,7 @@ pub struct Line<T>(pub Vec2<T>, pub Vec2<T>);
 
 impl From<Line<f32>> for Translate<f32> {
     fn from(line: Line<f32>) -> Self {
-        Self((line.0 * 0.5) + (line.1 * 0.5))
+        Self((line.0 * 0.5.into()) + (line.1 * 0.5.into()))
     }
 }
 
