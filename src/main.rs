@@ -6,7 +6,7 @@ mod prelude;
 
 use crate::defer::Defer;
 use crate::geom::{Geom, Line};
-use crate::math::{Dot, Normalize, Vec2, Vec3, Vec4};
+use crate::math::{Distance, Dot, Normalize, Vec2, Vec3, Vec4};
 use std::convert::TryInto;
 use std::ffi::{c_char, c_int, c_void, CStr, CString};
 use std::fs::read_to_string;
@@ -232,7 +232,6 @@ fn main() {
         y: 0.0,
         z: view_distance,
     };
-    let camera_latency = 0.02325;
 
     #[allow(clippy::cast_precision_loss)]
     let projection = math::perspective(
@@ -243,10 +242,15 @@ fn main() {
     );
     let inverse_projection = math::inverse_perspective(&projection);
 
-    let player_acceleration = 2.5;
-    let player_drag = 0.775;
+    let player_acceleration = 2.125;
+    let player_drag = 0.725;
 
     let mut player_speed: Vec2<f32> = Vec2::default();
+
+    let camera_acceleration = 1.1125;
+    let camera_drag = 0.8925;
+
+    let mut camera_speed: Vec2<f32> = Vec2::default();
 
     let player_quad_scale = 25.0;
     let player_line_scale = 6.75;
@@ -381,6 +385,9 @@ fn main() {
         },
     ];
     let player_quad_index = quads.len() - 1;
+
+    let waypoint_indices_start = 5;
+    let waypoint_indices_end = 15;
 
     let mut lines = [
         Geom {
@@ -574,9 +581,11 @@ fn main() {
             }
             r#move = r#move.normalize();
 
-            player_speed += r#move * player_acceleration.into();
-            player_speed *= player_drag.into();
-            quads[player_quad_index].translate.0 += player_speed;
+            camera_speed += r#move * camera_acceleration.into();
+            camera_speed *= camera_drag.into();
+
+            camera.x += camera_speed.x;
+            camera.y += camera_speed.y;
 
             let player_line = Line(
                 quads[player_quad_index].translate.0,
@@ -585,9 +594,6 @@ fn main() {
 
             lines[player_line_index].translate = player_line.into();
             lines[player_line_index].scale = player_line.into();
-
-            camera.x += (quads[player_quad_index].translate.0.x - camera.x) * camera_latency;
-            camera.y += (quads[player_quad_index].translate.0.y - camera.y) * camera_latency;
 
             let view = math::look_at(camera, Vec3 { z: 0.0, ..camera }, view_up);
             uniform!(program, view);
@@ -618,6 +624,27 @@ fn main() {
             world_cursor.x += camera.x;
             world_cursor.y += camera.y;
 
+            let gap = world_cursor.distance(quads[player_quad_index].translate.0);
+            if (player_quad_scale / 2.0) < gap {
+                r#move = (world_cursor - quads[player_quad_index].translate.0).normalize();
+                player_speed += r#move * player_acceleration.into();
+            }
+            player_speed *= player_drag.into();
+            quads[player_quad_index].translate.0 += player_speed;
+
+            let mut min_distance = f32::INFINITY;
+            let mut nearest_index = quads.len();
+            for (i, waypoint) in
+                quads.iter().enumerate().take(waypoint_indices_end).skip(waypoint_indices_start)
+            {
+                let candidate = world_cursor.distance(waypoint.translate.0);
+                if candidate < min_distance {
+                    min_distance = candidate;
+                    nearest_index = i;
+                }
+            }
+            quads[nearest_index].color.0.x = 1.0;
+
             let cursor_line = Line(quads[player_quad_index].translate.0, world_cursor);
             lines[cursor_line_index].translate = cursor_line.into();
             lines[cursor_line_index].scale = cursor_line.into();
@@ -628,6 +655,8 @@ fn main() {
             bind_and_draw(vao[1], instance_vbo[1], &lines, &line_vertices, ffi::GL_LINES);
 
             ffi::glfwSwapBuffers(window);
+
+            quads[nearest_index].color.0.x = waypoint_color.x;
 
             frames += 1;
         }

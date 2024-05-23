@@ -291,7 +291,6 @@ impl<T: Dot<T, f32> + std::ops::Mul<Output = T> + std::convert::From<f32> + Copy
     }
 }
 
-#[allow(dead_code)]
 pub trait Distance<T> {
     fn distance(self, other: Self) -> T;
 }
