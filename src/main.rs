@@ -300,11 +300,7 @@ fn update_camera(
     camera.y += camera_speed.y;
 }
 
-fn update_cursor(
-    window: *mut ffi::GLFWwindow,
-    inverse_projection: &Mat4<f32>,
-    world_cursor: &mut Vec2<f32>,
-) {
+fn unproject_cursor(window: *mut ffi::GLFWwindow, inverse_projection: &Mat4<f32>) -> Vec4<f32> {
     let mut screen_cursor: Vec2<f64> = Vec2::default();
     unsafe {
         ffi::glfwGetCursorPos(window, &mut screen_cursor.x, &mut screen_cursor.y);
@@ -323,13 +319,7 @@ fn update_cursor(
         w: 1.0,
     };
 
-    let unprojected_cursor = screen_cursor.dot(inverse_projection);
-
-    *world_cursor = Vec2 {
-        x: unprojected_cursor.x,
-        y: unprojected_cursor.y,
-    };
-    *world_cursor *= VIEW_DISTANCE.into();
+    screen_cursor.dot(inverse_projection)
 }
 
 fn update_player<const N: usize>(
@@ -744,10 +734,10 @@ fn main() {
         }
 
         update_camera(window, &mut camera, &mut camera_speed);
-        update_cursor(window, &inverse_projection, &mut world_cursor);
 
-        world_cursor.x += camera.x;
-        world_cursor.y += camera.y;
+        let screen_cursor = unproject_cursor(window, &inverse_projection);
+        world_cursor.x = screen_cursor.x.mul_add(VIEW_DISTANCE, camera.x);
+        world_cursor.y = screen_cursor.y.mul_add(VIEW_DISTANCE, camera.y);
 
         let cursor_waypoint_idx = geom::nearest(
             &quads[FIRST_WAYPOINT_INDEX..(FIRST_WAYPOINT_INDEX + WAYPOINT_LEN)],

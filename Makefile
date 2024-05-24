@@ -44,18 +44,28 @@ LIBS = \
 	-lglfw
 
 .PHONY: all
-all: bin/main
+all: bin/main bin/test
 
 .PHONY: clean
 clean:
 	rm -rf bin/
-
-.PHONY: run
-run: all
-	RUST_BACKTRACE=1 ./bin/main
 
 bin/main: src/*
 	mkdir -p bin/
 	clang-format -i src/*.glsl
 	rustfmt $(SHARED) src/*.rs
 	mold -run clippy-driver $(SHARED) $(RUSTC) $(CLIPPY) $(LIBS) -o ./bin/main src/main.rs
+
+.PHONY: run
+run: bin/main
+	RUST_BACKTRACE=1 ./bin/main
+
+bin/test: src/*
+	mkdir -p bin/
+	clang-format -i src/*.glsl
+	rustfmt $(SHARED) src/*.rs
+	mold -run clippy-driver $(SHARED) $(RUSTC) $(CLIPPY) $(LIBS) --test -o ./bin/test src/main.rs
+
+.PHONY: test
+test: bin/test
+	RUST_BACKTRACE=1 ./bin/test

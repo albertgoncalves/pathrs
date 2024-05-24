@@ -158,6 +158,22 @@ pub fn inverse_perspective(mat: &Mat4<f32>) -> Mat4<f32> {
     inv
 }
 
+#[test]
+fn test_inverse_perspective() {
+    let projection = perspective(0.45, 800.0 / 600.0, 1.0, 1000.0);
+    let inverse_projection = inverse_perspective(&projection);
+    let identity = projection.dot(&inverse_projection);
+    for i in 0..4 {
+        for j in 0..4 {
+            if i == j {
+                assert!((identity.0[i][j] - 1.0).abs() < f32::EPSILON);
+            } else {
+                assert!(identity.0[i][j].abs() < f32::EPSILON);
+            }
+        }
+    }
+}
+
 pub fn look_at(from: Vec3<f32>, to: Vec3<f32>, up: Vec3<f32>) -> Mat4<f32> {
     let forward: Vec3<f32> = (to - from).normalize();
     let right: Vec3<f32> = forward.cross(up).normalize();
@@ -183,30 +199,6 @@ pub fn look_at(from: Vec3<f32>, to: Vec3<f32>, up: Vec3<f32>) -> Mat4<f32> {
     mat.0[3][3] = 1.0;
 
     mat
-}
-
-#[allow(dead_code)]
-pub fn inverse_look_at(mat: &Mat4<f32>) -> Mat4<f32> {
-    let mut inv = Mat4::default();
-
-    inv.0[0][0] = mat.0[0][0];
-    inv.0[0][1] = mat.0[1][0];
-    inv.0[0][2] = mat.0[2][0];
-
-    inv.0[1][0] = mat.0[0][1];
-    inv.0[1][1] = mat.0[1][1];
-    inv.0[1][2] = mat.0[2][1];
-
-    inv.0[2][0] = mat.0[0][2];
-    inv.0[2][1] = mat.0[1][2];
-    inv.0[2][2] = mat.0[2][2];
-
-    inv.0[3][0] = -mat.0[3][0] / (inv.0[0][0] + inv.0[0][1] + inv.0[0][2]);
-    inv.0[3][1] = -mat.0[3][1] / (inv.0[1][0] + inv.0[1][1] + inv.0[1][2]);
-    inv.0[3][2] = -mat.0[3][2] / (inv.0[2][0] + inv.0[2][1] + inv.0[2][2]);
-    inv.0[3][3] = 1.0;
-
-    inv
 }
 
 pub trait Rotate<T> {
