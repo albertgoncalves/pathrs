@@ -2,11 +2,12 @@ mod defer;
 mod ffi;
 mod geom;
 mod math;
+mod pathfinding;
 mod prelude;
 
 use crate::defer::Defer;
 use crate::geom::{Geom, Line};
-use crate::math::{Distance, Dot, Normalize, Vec2, Vec3, Vec4};
+use crate::math::{Distance, Dot, Mat4, Normalize, Vec2, Vec3, Vec4};
 use std::convert::TryInto;
 use std::ffi::{c_char, c_int, c_void, CStr, CString};
 use std::fs::read_to_string;
@@ -16,6 +17,24 @@ use std::ptr;
 use std::slice::from_raw_parts;
 use std::str::from_utf8_unchecked;
 use std::time;
+
+const WINDOW_WIDTH: i32 = 1400;
+const WINDOW_HEIGHT: i32 = 900;
+
+const CAMERA_ACCEL: f32 = 1.1125;
+const CAMERA_DRAG: f32 = 0.8925;
+
+const VIEW_DISTANCE: f32 = 600.0;
+const VIEW_UP: Vec3<f32> = Vec3 { x: 0.0, y: 1.0, z: 0.0 };
+
+const FIRST_WAYPOINT_INDEX: usize = 5;
+const WAYPOINT_LEN: usize = 22 - FIRST_WAYPOINT_INDEX;
+
+const PLAYER_ACCEL: f32 = 2.125;
+const PLAYER_DRAG: f32 = 0.725;
+
+const PLAYER_QUAD_SCALE: f32 = 25.0;
+const PLAYER_LINE_SCALE: f32 = 6.75;
 
 extern "C" fn callback_glfw_error(error_code: c_int, description: *const c_char) {
     let mut message = error_code.to_string();
@@ -220,40 +239,156 @@ fn pressed(window: *mut ffi::GLFWwindow, key: c_int) -> bool {
     unsafe { ffi::glfwGetKey(window, key) == ffi::GLFW_PRESS }
 }
 
+fn update_camera(
+    window: *mut ffi::GLFWwindow,
+    camera: &mut Vec3<f32>,
+    camera_speed: &mut Vec2<f32>,
+) {
+    let mut step: Vec2<f32> = Vec2::default();
+    if pressed(window, ffi::GLFW_KEY_W) {
+        step.y += 1.0;
+    }
+    if pressed(window, ffi::GLFW_KEY_S) {
+        step.y -= 1.0;
+    }
+    if pressed(window, ffi::GLFW_KEY_A) {
+        step.x -= 1.0;
+    }
+    if pressed(window, ffi::GLFW_KEY_D) {
+        step.x += 1.0;
+    }
+    *camera_speed += step.normalize() * CAMERA_ACCEL.into();
+    *camera_speed *= CAMERA_DRAG.into();
+
+    camera.x += camera_speed.x;
+    camera.y += camera_speed.y;
+}
+
+fn update_cursor(
+    window: *mut ffi::GLFWwindow,
+    camera: Vec3<f32>,
+    world_cursor: &mut Vec2<f32>,
+    quads: &[Geom<f32>],
+    inverse_projection: &Mat4<f32>,
+) -> usize {
+    let mut screen_cursor: Vec2<f64> = Vec2::default();
+    unsafe {
+        ffi::glfwGetCursorPos(window, &mut screen_cursor.x, &mut screen_cursor.y);
+    }
+    screen_cursor.x /= f64::from(WINDOW_WIDTH);
+    screen_cursor.y /= f64::from(WINDOW_HEIGHT);
+    screen_cursor -= 0.5.into();
+    screen_cursor *= 2.0.into();
+    screen_cursor.y = -screen_cursor.y;
+
+    #[allow(clippy::cast_possible_truncation)]
+    let screen_cursor = Vec4 {
+        x: screen_cursor.x as f32,
+        y: screen_cursor.y as f32,
+        z: 0.0,
+        w: 1.0,
+    };
+
+    let unprojected_cursor = screen_cursor.dot(inverse_projection);
+
+    *world_cursor = Vec2 {
+        x: unprojected_cursor.x,
+        y: unprojected_cursor.y,
+    };
+    *world_cursor *= VIEW_DISTANCE.into();
+    world_cursor.x += camera.x;
+    world_cursor.y += camera.y;
+
+    let mut min_distance = f32::INFINITY;
+    let mut cursor_waypoint_idx = quads.len();
+
+    #[allow(clippy::needless_range_loop)]
+    for i in FIRST_WAYPOINT_INDEX..(FIRST_WAYPOINT_INDEX + WAYPOINT_LEN) {
+        let candidate = world_cursor.distance(quads[i].translate.0);
+        if candidate < min_distance {
+            min_distance = candidate;
+            cursor_waypoint_idx = i;
+        }
+    }
+
+    cursor_waypoint_idx
+}
+
+#[allow(clippy::too_many_arguments)]
+fn update_player<const N: usize>(
+    quads: &mut [Geom<f32>],
+    weights: &mut [[f32; N]; N],
+    nodes: &[Vec2<f32>],
+    edges: &[(usize, usize)],
+    player_speed: &mut Vec2<f32>,
+    player_quad_idx: usize,
+    player_waypoint_idx: &mut usize,
+    cursor_waypoint_idx: usize,
+) {
+    let path = pathfinding::dijkstra(
+        weights,
+        nodes,
+        edges,
+        *player_waypoint_idx - FIRST_WAYPOINT_INDEX,
+        cursor_waypoint_idx - FIRST_WAYPOINT_INDEX,
+    );
+
+    let distance = |i: usize, j: usize| quads[i].translate.0.distance(quads[j].translate.0);
+
+    let mut gap = distance(*player_waypoint_idx, player_quad_idx);
+    if (1 < path.len()) && (gap <= (PLAYER_QUAD_SCALE / 2.0)) {
+        *player_waypoint_idx = FIRST_WAYPOINT_INDEX + path[1];
+        gap = distance(*player_waypoint_idx, player_quad_idx);
+    }
+
+    if (PLAYER_QUAD_SCALE / 2.0) < gap {
+        let step = quads[*player_waypoint_idx].translate.0 - quads[player_quad_idx].translate.0;
+        *player_speed += step.normalize() * PLAYER_ACCEL.into();
+    }
+    *player_speed *= PLAYER_DRAG.into();
+    quads[player_quad_idx].translate.0 += *player_speed;
+}
+
+fn update_lines(
+    quads: &[Geom<f32>],
+    lines: &mut [Geom<f32>],
+    player_speed: Vec2<f32>,
+    player_quad_idx: usize,
+    player_line_idx: usize,
+    world_cursor: Vec2<f32>,
+    cursor_line_idx: usize,
+) {
+    let player_line = Line(
+        quads[player_quad_idx].translate.0,
+        quads[player_quad_idx].translate.0 + (player_speed * PLAYER_LINE_SCALE.into()),
+    );
+
+    lines[player_line_idx].translate = player_line.into();
+    lines[player_line_idx].scale = player_line.into();
+
+    let cursor_line = Line(quads[player_quad_idx].translate.0, world_cursor);
+    lines[cursor_line_idx].translate = cursor_line.into();
+    lines[cursor_line_idx].scale = cursor_line.into();
+}
+
 fn main() {
-    let window_width = 1400;
-    let window_height = 900;
-
-    let view_distance = 600.0;
-    let view_up = Vec3 { x: 0.0, y: 1.0, z: 0.0 };
-
     let mut camera = Vec3 {
         x: 0.0,
         y: 0.0,
-        z: view_distance,
+        z: VIEW_DISTANCE,
     };
 
     #[allow(clippy::cast_precision_loss)]
     let projection = math::perspective(
         45.0,
-        (window_width as f32) / (window_height as f32),
-        view_distance - 0.1,
-        view_distance + 0.1,
+        (WINDOW_WIDTH as f32) / (WINDOW_HEIGHT as f32),
+        VIEW_DISTANCE - 0.1,
+        VIEW_DISTANCE + 0.1,
     );
-    let inverse_projection = math::inverse_perspective(&projection);
-
-    let player_acceleration = 2.125;
-    let player_drag = 0.725;
+    let inverse_projection: Mat4<f32> = math::inverse_perspective(&projection);
 
     let mut player_speed: Vec2<f32> = Vec2::default();
-
-    let camera_acceleration = 1.1125;
-    let camera_drag = 0.8925;
-
     let mut camera_speed: Vec2<f32> = Vec2::default();
-
-    let player_quad_scale = 25.0;
-    let player_line_scale = 6.75;
 
     let waypoint_scale = 15.0;
 
@@ -339,12 +474,47 @@ fn main() {
             color: waypoint_color.into(),
         },
         Geom {
+            translate: Vec2 { x: 250.0, y: 50.0 }.into(),
+            scale: waypoint_scale.into(),
+            color: waypoint_color.into(),
+        },
+        Geom {
+            translate: Vec2 { x: 250.0, y: 100.0 }.into(),
+            scale: waypoint_scale.into(),
+            color: waypoint_color.into(),
+        },
+        Geom {
+            translate: Vec2 { x: 250.0, y: 150.0 }.into(),
+            scale: waypoint_scale.into(),
+            color: waypoint_color.into(),
+        },
+        Geom {
+            translate: Vec2 { x: 250.0, y: 200.0 }.into(),
+            scale: waypoint_scale.into(),
+            color: waypoint_color.into(),
+        },
+        Geom {
             translate: Vec2 { x: 250.0, y: 250.0 }.into(),
             scale: waypoint_scale.into(),
             color: waypoint_color.into(),
         },
         Geom {
+            translate: Vec2 { x: 200.0, y: 250.0 }.into(),
+            scale: waypoint_scale.into(),
+            color: waypoint_color.into(),
+        },
+        Geom {
             translate: Vec2 { x: 150.0, y: 250.0 }.into(),
+            scale: waypoint_scale.into(),
+            color: waypoint_color.into(),
+        },
+        Geom {
+            translate: Vec2 { x: 150.0, y: 200.0 }.into(),
+            scale: waypoint_scale.into(),
+            color: waypoint_color.into(),
+        },
+        Geom {
+            translate: Vec2 { x: 150.0, y: 150.0 }.into(),
             scale: waypoint_scale.into(),
             color: waypoint_color.into(),
         },
@@ -380,14 +550,24 @@ fn main() {
         },
         Geom {
             translate: Vec2::default().into(),
-            scale: player_quad_scale.into(),
+            scale: PLAYER_QUAD_SCALE.into(),
             color: player_quad_color.into(),
         },
     ];
-    let player_quad_index = quads.len() - 1;
+    let player_quad_idx = quads.len() - 1;
+    let mut player_waypoint_idx = 5;
 
-    let waypoint_indices_start = 5;
-    let waypoint_indices_end = 15;
+    let mut weights = [[0.0; WAYPOINT_LEN]; WAYPOINT_LEN];
+    let mut nodes: [Vec2<f32>; WAYPOINT_LEN] = [Vec2::default(); WAYPOINT_LEN];
+    for i in 0..WAYPOINT_LEN {
+        nodes[i] = quads[FIRST_WAYPOINT_INDEX + i].translate.0;
+    }
+    let mut edges: [(usize, usize); WAYPOINT_LEN] = [(WAYPOINT_LEN, WAYPOINT_LEN); WAYPOINT_LEN];
+
+    #[allow(clippy::needless_range_loop)]
+    for i in 0..WAYPOINT_LEN {
+        edges[i] = (i, (i + 1) % WAYPOINT_LEN);
+    }
 
     let mut lines = [
         Geom {
@@ -451,8 +631,8 @@ fn main() {
             color: player_line_color.into(),
         },
     ];
-    let cursor_line_index = lines.len() - 2;
-    let player_line_index = lines.len() - 1;
+    let cursor_line_idx = lines.len() - 2;
+    let player_line_idx = lines.len() - 1;
 
     let quad_vertices = [
         Vec2 { x: 0.5, y: 0.5 },
@@ -480,8 +660,8 @@ fn main() {
         ffi::glfwWindowHint(ffi::GLFW_SAMPLES, 16);
 
         let window = ffi::glfwCreateWindow(
-            window_width,
-            window_height,
+            WINDOW_WIDTH,
+            WINDOW_HEIGHT,
             CString::new(std::module_path!())
                 .unwrap()
                 .as_bytes_with_nul()
@@ -511,7 +691,7 @@ fn main() {
             background_color.w,
         );
         ffi::glEnable(ffi::GL_MULTISAMPLE);
-        ffi::glViewport(0, 0, window_width, window_height);
+        ffi::glViewport(0, 0, WINDOW_WIDTH, WINDOW_HEIGHT);
 
         let mut vao: [ffi::GLuint; 2] = [0; 2];
         ffi::glGenVertexArrays(vao.len().try_into().unwrap(), vao.as_mut_ptr());
@@ -566,88 +746,33 @@ fn main() {
 
             ffi::glfwPollEvents();
 
-            let mut r#move: Vec2<f32> = Vec2::default();
-            if pressed(window, ffi::GLFW_KEY_W) {
-                r#move.y += 1.0;
-            }
-            if pressed(window, ffi::GLFW_KEY_S) {
-                r#move.y -= 1.0;
-            }
-            if pressed(window, ffi::GLFW_KEY_A) {
-                r#move.x -= 1.0;
-            }
-            if pressed(window, ffi::GLFW_KEY_D) {
-                r#move.x += 1.0;
-            }
-            r#move = r#move.normalize();
-
-            camera_speed += r#move * camera_acceleration.into();
-            camera_speed *= camera_drag.into();
-
-            camera.x += camera_speed.x;
-            camera.y += camera_speed.y;
-
-            let player_line = Line(
-                quads[player_quad_index].translate.0,
-                quads[player_quad_index].translate.0 + (player_speed * player_line_scale.into()),
+            update_camera(window, &mut camera, &mut camera_speed);
+            let cursor_waypoint_idx =
+                update_cursor(window, camera, &mut world_cursor, &quads, &inverse_projection);
+            update_player(
+                &mut quads,
+                &mut weights,
+                &nodes,
+                &edges,
+                &mut player_speed,
+                player_quad_idx,
+                &mut player_waypoint_idx,
+                cursor_waypoint_idx,
+            );
+            update_lines(
+                &quads,
+                &mut lines,
+                player_speed,
+                player_quad_idx,
+                player_line_idx,
+                world_cursor,
+                cursor_line_idx,
             );
 
-            lines[player_line_index].translate = player_line.into();
-            lines[player_line_index].scale = player_line.into();
+            quads[cursor_waypoint_idx].color.0.x = 1.0;
 
-            let view = math::look_at(camera, Vec3 { z: 0.0, ..camera }, view_up);
+            let view = math::look_at(camera, Vec3 { z: 0.0, ..camera }, VIEW_UP);
             uniform!(program, view);
-
-            let mut screen_cursor: Vec2<f64> = Vec2::default();
-            ffi::glfwGetCursorPos(window, &mut screen_cursor.x, &mut screen_cursor.y);
-            screen_cursor.x /= f64::from(window_width);
-            screen_cursor.y /= f64::from(window_height);
-            screen_cursor -= 0.5.into();
-            screen_cursor *= 2.0.into();
-            screen_cursor.y = -screen_cursor.y;
-
-            #[allow(clippy::cast_possible_truncation)]
-            let screen_cursor = Vec4 {
-                x: screen_cursor.x as f32,
-                y: screen_cursor.y as f32,
-                z: 0.0,
-                w: 1.0,
-            };
-
-            let unprojected_cursor = screen_cursor.dot(&inverse_projection);
-
-            world_cursor = Vec2 {
-                x: unprojected_cursor.x,
-                y: unprojected_cursor.y,
-            };
-            world_cursor *= view_distance.into();
-            world_cursor.x += camera.x;
-            world_cursor.y += camera.y;
-
-            let gap = world_cursor.distance(quads[player_quad_index].translate.0);
-            if (player_quad_scale / 2.0) < gap {
-                r#move = (world_cursor - quads[player_quad_index].translate.0).normalize();
-                player_speed += r#move * player_acceleration.into();
-            }
-            player_speed *= player_drag.into();
-            quads[player_quad_index].translate.0 += player_speed;
-
-            let mut min_distance = f32::INFINITY;
-            let mut nearest_index = quads.len();
-            for (i, waypoint) in
-                quads.iter().enumerate().take(waypoint_indices_end).skip(waypoint_indices_start)
-            {
-                let candidate = world_cursor.distance(waypoint.translate.0);
-                if candidate < min_distance {
-                    min_distance = candidate;
-                    nearest_index = i;
-                }
-            }
-            quads[nearest_index].color.0.x = 1.0;
-
-            let cursor_line = Line(quads[player_quad_index].translate.0, world_cursor);
-            lines[cursor_line_index].translate = cursor_line.into();
-            lines[cursor_line_index].scale = cursor_line.into();
 
             ffi::glClear(ffi::GL_COLOR_BUFFER_BIT);
 
@@ -656,7 +781,7 @@ fn main() {
 
             ffi::glfwSwapBuffers(window);
 
-            quads[nearest_index].color.0.x = waypoint_color.x;
+            quads[cursor_waypoint_idx].color.0.x = waypoint_color.x;
 
             frames += 1;
         }
