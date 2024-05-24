@@ -246,6 +246,15 @@ impl Dot<[f32; 4], f32> for Vec4<f32> {
     }
 }
 
+impl Dot<[f32; 4], f32> for [f32; 4] {
+    fn dot(self, other: [f32; 4]) -> f32 {
+        self[3].mul_add(
+            other[3],
+            self[2].mul_add(other[2], self[1].mul_add(other[1], self[0] * other[0])),
+        )
+    }
+}
+
 impl<T: Copy> Dot<&Mat4<T>, Self> for Vec4<T>
 where
     Self: Dot<[T; 4], T>,
@@ -257,6 +266,24 @@ where
             z: self.dot(other.0[2]),
             w: self.dot(other.0[3]),
         }
+    }
+}
+
+impl<T: Copy + Default> Dot<&Self, Self> for Mat4<T>
+where
+    [T; 4]: Dot<[T; 4], T>,
+{
+    fn dot(self, other: &Self) -> Self {
+        let mut mat = Self::default();
+
+        for i in 0..4 {
+            for j in 0..4 {
+                mat.0[i][j] =
+                    self.0[i].dot([other.0[0][j], other.0[1][j], other.0[2][j], other.0[3][j]]);
+            }
+        }
+
+        mat
     }
 }
 
