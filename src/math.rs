@@ -7,10 +7,7 @@ pub struct Vec2<T> {
 
 impl From<Vec2<i32>> for Vec2<f64> {
     fn from(vec: Vec2<i32>) -> Self {
-        Self {
-            x: vec.x.into(),
-            y: vec.y.into(),
-        }
+        Self { x: vec.x.into(), y: vec.y.into() }
     }
 }
 
@@ -91,11 +88,7 @@ pub struct Vec3<T> {
 
 impl<T: Copy> From<T> for Vec3<T> {
     fn from(value: T) -> Self {
-        Self {
-            x: value,
-            y: value,
-            z: value,
-        }
+        Self { x: value, y: value, z: value }
     }
 }
 
@@ -285,7 +278,7 @@ pub trait Normalize {
     fn normalize(self) -> Self;
 }
 
-impl<T: Dot<T, f32> + std::ops::Mul<Output = T> + std::convert::From<f32> + Copy> Normalize for T {
+impl<T: Dot<T, f32> + std::ops::Mul<Output = T> + From<f32> + Copy> Normalize for T {
     fn normalize(self) -> Self {
         self * (1.0 / (self.dot(self) + f32::EPSILON).sqrt()).into()
     }

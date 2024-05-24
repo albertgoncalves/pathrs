@@ -18,6 +18,14 @@ use std::slice::from_raw_parts;
 use std::str::from_utf8_unchecked;
 use std::time;
 
+const QUAD_VERTICES: [Vec2<f32>; 4] = [
+    Vec2 { x: 0.5, y: 0.5 },
+    Vec2 { x: 0.5, y: -0.5 },
+    Vec2 { x: -0.5, y: 0.5 },
+    Vec2 { x: -0.5, y: -0.5 },
+];
+const LINE_VERTICES: [Vec2<f32>; 2] = [Vec2 { x: -0.5, y: -0.5 }, Vec2 { x: 0.5, y: 0.5 }];
+
 const WINDOW_WIDTH: i32 = 1400;
 const WINDOW_HEIGHT: i32 = 900;
 
@@ -27,14 +35,34 @@ const CAMERA_DRAG: f32 = 0.8925;
 const VIEW_DISTANCE: f32 = 600.0;
 const VIEW_UP: Vec3<f32> = Vec3 { x: 0.0, y: 1.0, z: 0.0 };
 
+const LINE_WIDTH: f32 = 4.0;
+
 const FIRST_WAYPOINT_INDEX: usize = 5;
 const WAYPOINT_LEN: usize = 22 - FIRST_WAYPOINT_INDEX;
+
+const WAYPOINT_SCALE: f32 = 15.0;
 
 const PLAYER_ACCEL: f32 = 2.125;
 const PLAYER_DRAG: f32 = 0.725;
 
 const PLAYER_QUAD_SCALE: f32 = 25.0;
 const PLAYER_LINE_SCALE: f32 = 6.75;
+
+const QUADS_LEN: usize = 23;
+const PLAYER_QUAD_IDX: usize = QUADS_LEN - 1;
+
+const LINES_LEN: usize = 12;
+const PLAYER_LINE_IDX: usize = LINES_LEN - 1;
+const CURSOR_LINE_IDX: usize = LINES_LEN - 2;
+
+const PLAYER_QUAD_COLOR: Vec4<f32> = Vec4 { x: 1.0, y: 0.5, z: 0.75, w: 1.0 };
+const PLAYER_LINE_COLOR: Vec4<f32> = Vec4 { w: 0.375, ..PLAYER_QUAD_COLOR };
+const CURSOR_LINE_COLOR: Vec4<f32> = Vec4 { w: 0.15, ..PLAYER_QUAD_COLOR };
+const BACKGROUND_COLOR: Vec4<f32> = Vec4 { x: 0.1, y: 0.09, z: 0.11, w: 1.0 };
+const WALL_COLOR: Vec4<f32> = Vec4 { x: 1.0, y: 1.0, z: 1.0, w: 0.9 };
+const PATH_COLOR: Vec4<f32> = Vec4 { x: 0.6, y: 0.85, z: 0.9, w: 0.0375 };
+const WAYPOINT_COLOR: Vec4<f32> = Vec4 { x: 0.4, y: 0.875, z: 0.9, w: 0.2 };
+const WAYPOINT_HIGHLIGHT_COLOR: Vec4<f32> = Vec4 { x: 1.0, ..WAYPOINT_COLOR };
 
 extern "C" fn callback_glfw_error(error_code: c_int, description: *const c_char) {
     let mut message = error_code.to_string();
@@ -93,27 +121,31 @@ fn compile_shader(r#type: ffi::GLenum, source: &str) -> ffi::GLuint {
 }
 
 fn create_program() -> ffi::GLuint {
+    let program = unsafe { ffi::glCreateProgram() };
+
+    let vert_shader = compile_shader(
+        ffi::GL_VERTEX_SHADER,
+        &read_to_string(Path::new("src").join("vert.glsl")).unwrap(),
+    );
+    defer!(unsafe {
+        ffi::glDeleteShader(vert_shader);
+    });
+
+    let frag_shader = compile_shader(
+        ffi::GL_FRAGMENT_SHADER,
+        &read_to_string(Path::new("src").join("frag.glsl")).unwrap(),
+    );
+    defer!(unsafe {
+        ffi::glDeleteShader(frag_shader);
+    });
+
     unsafe {
-        let program = ffi::glCreateProgram();
-
-        let vert_shader = compile_shader(
-            ffi::GL_VERTEX_SHADER,
-            &read_to_string(Path::new("src").join("vert.glsl")).unwrap(),
-        );
-        defer!(ffi::glDeleteShader(vert_shader));
-
-        let frag_shader = compile_shader(
-            ffi::GL_FRAGMENT_SHADER,
-            &read_to_string(Path::new("src").join("frag.glsl")).unwrap(),
-        );
-        defer!(ffi::glDeleteShader(frag_shader));
-
         ffi::glAttachShader(program, vert_shader);
         ffi::glAttachShader(program, frag_shader);
         ffi::glLinkProgram(program);
-
-        program
     }
+
+    program
 }
 
 fn buffer<T>(target: ffi::GLuint, data: &[T], usage: ffi::GLenum) {
@@ -199,11 +231,15 @@ fn buffers_and_attributes(
 ) {
     unsafe {
         ffi::glBindVertexArray(vao);
+    }
 
-        buffer(vbo, vertices, ffi::GL_STATIC_DRAW);
+    buffer(vbo, vertices, ffi::GL_STATIC_DRAW);
+    unsafe {
         attribute!(program, Vec2<ffi::GLfloat>, position);
+    }
 
-        buffer(instance_vbo, geoms, ffi::GL_DYNAMIC_DRAW);
+    buffer(instance_vbo, geoms, ffi::GL_DYNAMIC_DRAW);
+    unsafe {
         attribute!(program, Geom<ffi::GLfloat>, translate, 1);
         attribute!(program, Geom<ffi::GLfloat>, scale, 1);
         attribute!(program, Geom<ffi::GLfloat>, color, 1);
@@ -266,11 +302,9 @@ fn update_camera(
 
 fn update_cursor(
     window: *mut ffi::GLFWwindow,
-    camera: Vec3<f32>,
-    world_cursor: &mut Vec2<f32>,
-    quads: &[Geom<f32>],
     inverse_projection: &Mat4<f32>,
-) -> usize {
+    world_cursor: &mut Vec2<f32>,
+) {
     let mut screen_cursor: Vec2<f64> = Vec2::default();
     unsafe {
         ffi::glfwGetCursorPos(window, &mut screen_cursor.x, &mut screen_cursor.y);
@@ -296,88 +330,58 @@ fn update_cursor(
         y: unprojected_cursor.y,
     };
     *world_cursor *= VIEW_DISTANCE.into();
-    world_cursor.x += camera.x;
-    world_cursor.y += camera.y;
-
-    let mut min_distance = f32::INFINITY;
-    let mut cursor_waypoint_idx = quads.len();
-
-    #[allow(clippy::needless_range_loop)]
-    for i in FIRST_WAYPOINT_INDEX..(FIRST_WAYPOINT_INDEX + WAYPOINT_LEN) {
-        let candidate = world_cursor.distance(quads[i].translate.0);
-        if candidate < min_distance {
-            min_distance = candidate;
-            cursor_waypoint_idx = i;
-        }
-    }
-
-    cursor_waypoint_idx
 }
 
-#[allow(clippy::too_many_arguments)]
 fn update_player<const N: usize>(
     quads: &mut [Geom<f32>],
-    weights: &mut [[f32; N]; N],
-    nodes: &[Vec2<f32>],
-    edges: &[(usize, usize)],
+    weights: &[[f32; N]; N],
+    path: &mut [usize; N],
     player_speed: &mut Vec2<f32>,
-    player_quad_idx: usize,
     player_waypoint_idx: &mut usize,
     cursor_waypoint_idx: usize,
 ) {
-    let path = pathfinding::dijkstra(
+    let path_len = pathfinding::dijkstra(
         weights,
-        nodes,
-        edges,
         *player_waypoint_idx - FIRST_WAYPOINT_INDEX,
         cursor_waypoint_idx - FIRST_WAYPOINT_INDEX,
+        path,
     );
 
     let distance = |i: usize, j: usize| quads[i].translate.0.distance(quads[j].translate.0);
 
-    let mut gap = distance(*player_waypoint_idx, player_quad_idx);
-    if (1 < path.len()) && (gap <= (PLAYER_QUAD_SCALE / 2.0)) {
+    let mut gap = distance(*player_waypoint_idx, PLAYER_QUAD_IDX);
+    if (1 < path_len) && (gap <= (PLAYER_QUAD_SCALE / 2.0)) {
         *player_waypoint_idx = FIRST_WAYPOINT_INDEX + path[1];
-        gap = distance(*player_waypoint_idx, player_quad_idx);
+        gap = distance(*player_waypoint_idx, PLAYER_QUAD_IDX);
     }
 
     if (PLAYER_QUAD_SCALE / 2.0) < gap {
-        let step = quads[*player_waypoint_idx].translate.0 - quads[player_quad_idx].translate.0;
+        let step = quads[*player_waypoint_idx].translate.0 - quads[PLAYER_QUAD_IDX].translate.0;
         *player_speed += step.normalize() * PLAYER_ACCEL.into();
     }
     *player_speed *= PLAYER_DRAG.into();
-    quads[player_quad_idx].translate.0 += *player_speed;
+    quads[PLAYER_QUAD_IDX].translate.0 += *player_speed;
 }
 
 fn update_lines(
     quads: &[Geom<f32>],
     lines: &mut [Geom<f32>],
     player_speed: Vec2<f32>,
-    player_quad_idx: usize,
-    player_line_idx: usize,
     world_cursor: Vec2<f32>,
-    cursor_line_idx: usize,
 ) {
     let player_line = Line(
-        quads[player_quad_idx].translate.0,
-        quads[player_quad_idx].translate.0 + (player_speed * PLAYER_LINE_SCALE.into()),
+        quads[PLAYER_QUAD_IDX].translate.0,
+        quads[PLAYER_QUAD_IDX].translate.0 + (player_speed * PLAYER_LINE_SCALE.into()),
     );
+    lines[PLAYER_LINE_IDX].translate = player_line.into();
+    lines[PLAYER_LINE_IDX].scale = player_line.into();
 
-    lines[player_line_idx].translate = player_line.into();
-    lines[player_line_idx].scale = player_line.into();
-
-    let cursor_line = Line(quads[player_quad_idx].translate.0, world_cursor);
-    lines[cursor_line_idx].translate = cursor_line.into();
-    lines[cursor_line_idx].scale = cursor_line.into();
+    let cursor_line = Line(quads[PLAYER_QUAD_IDX].translate.0, world_cursor);
+    lines[CURSOR_LINE_IDX].translate = cursor_line.into();
+    lines[CURSOR_LINE_IDX].scale = cursor_line.into();
 }
 
 fn main() {
-    let mut camera = Vec3 {
-        x: 0.0,
-        y: 0.0,
-        z: VIEW_DISTANCE,
-    };
-
     #[allow(clippy::cast_precision_loss)]
     let projection = math::perspective(
         45.0,
@@ -387,51 +391,16 @@ fn main() {
     );
     let inverse_projection: Mat4<f32> = math::inverse_perspective(&projection);
 
+    let mut camera = Vec3 { x: 0.0, y: 0.0, z: VIEW_DISTANCE };
+
     let mut player_speed: Vec2<f32> = Vec2::default();
     let mut camera_speed: Vec2<f32> = Vec2::default();
 
-    let waypoint_scale = 15.0;
+    let mut player_waypoint_idx = 5;
 
-    let player_quad_color = Vec4 {
-        x: 1.0,
-        y: 0.5,
-        z: 0.75,
-        w: 1.0,
-    };
-    let player_line_color = Vec4 {
-        w: 0.375,
-        ..player_quad_color
-    };
-    let cursor_line_color = Vec4 {
-        w: 0.15,
-        ..player_quad_color
-    };
-    let background_color = Vec4 {
-        x: 0.1,
-        y: 0.09,
-        z: 0.11,
-        w: 1.0,
-    };
-    let wall_color = Vec4 {
-        x: 1.0,
-        y: 1.0,
-        z: 1.0,
-        w: 0.9,
-    };
-    let path_color = Vec4 {
-        x: 0.6,
-        y: 0.85,
-        z: 0.9,
-        w: 0.0375,
-    };
-    let waypoint_color = Vec4 {
-        x: 0.4,
-        y: 0.875,
-        z: 0.9,
-        w: 0.2,
-    };
+    let mut world_cursor = Vec2::default();
 
-    let mut quads = [
+    let mut quads: [Geom<f32>; QUADS_LEN] = [
         Geom {
             translate: Vec2::default().into(),
             scale: Vec2 { x: 600.0, y: 600.0 }.into(),
@@ -446,220 +415,220 @@ fn main() {
         Geom {
             translate: Vec2 { x: 50.0, y: 50.0 }.into(),
             scale: Vec2 { x: 310.0, y: 10.0 }.into(),
-            color: wall_color.into(),
+            color: WALL_COLOR.into(),
         },
         Geom {
             translate: Vec2 { x: -100.0, y: -75.0 }.into(),
             scale: Vec2 { x: 10.0, y: 260.0 }.into(),
-            color: wall_color.into(),
+            color: WALL_COLOR.into(),
         },
         Geom {
             translate: Vec2 { x: 200.0, y: 125.0 }.into(),
             scale: Vec2 { x: 10.0, y: 160.0 }.into(),
-            color: wall_color.into(),
+            color: WALL_COLOR.into(),
         },
         Geom {
             translate: Vec2 { x: -150.0, y: -200.0 }.into(),
             scale: Vec2 { x: 110.0, y: 10.0 }.into(),
-            color: wall_color.into(),
+            color: WALL_COLOR.into(),
         },
         Geom {
             translate: Vec2 { x: -50.0, y: 0.0 }.into(),
-            scale: waypoint_scale.into(),
-            color: waypoint_color.into(),
+            scale: WAYPOINT_SCALE.into(),
+            color: WAYPOINT_COLOR.into(),
         },
         Geom {
             translate: Vec2 { x: 250.0, y: 0.0 }.into(),
-            scale: waypoint_scale.into(),
-            color: waypoint_color.into(),
+            scale: WAYPOINT_SCALE.into(),
+            color: WAYPOINT_COLOR.into(),
         },
         Geom {
             translate: Vec2 { x: 250.0, y: 50.0 }.into(),
-            scale: waypoint_scale.into(),
-            color: waypoint_color.into(),
+            scale: WAYPOINT_SCALE.into(),
+            color: WAYPOINT_COLOR.into(),
         },
         Geom {
             translate: Vec2 { x: 250.0, y: 100.0 }.into(),
-            scale: waypoint_scale.into(),
-            color: waypoint_color.into(),
+            scale: WAYPOINT_SCALE.into(),
+            color: WAYPOINT_COLOR.into(),
         },
         Geom {
             translate: Vec2 { x: 250.0, y: 150.0 }.into(),
-            scale: waypoint_scale.into(),
-            color: waypoint_color.into(),
+            scale: WAYPOINT_SCALE.into(),
+            color: WAYPOINT_COLOR.into(),
         },
         Geom {
             translate: Vec2 { x: 250.0, y: 200.0 }.into(),
-            scale: waypoint_scale.into(),
-            color: waypoint_color.into(),
+            scale: WAYPOINT_SCALE.into(),
+            color: WAYPOINT_COLOR.into(),
         },
         Geom {
             translate: Vec2 { x: 250.0, y: 250.0 }.into(),
-            scale: waypoint_scale.into(),
-            color: waypoint_color.into(),
+            scale: WAYPOINT_SCALE.into(),
+            color: WAYPOINT_COLOR.into(),
         },
         Geom {
             translate: Vec2 { x: 200.0, y: 250.0 }.into(),
-            scale: waypoint_scale.into(),
-            color: waypoint_color.into(),
+            scale: WAYPOINT_SCALE.into(),
+            color: WAYPOINT_COLOR.into(),
         },
         Geom {
             translate: Vec2 { x: 150.0, y: 250.0 }.into(),
-            scale: waypoint_scale.into(),
-            color: waypoint_color.into(),
+            scale: WAYPOINT_SCALE.into(),
+            color: WAYPOINT_COLOR.into(),
         },
         Geom {
             translate: Vec2 { x: 150.0, y: 200.0 }.into(),
-            scale: waypoint_scale.into(),
-            color: waypoint_color.into(),
+            scale: WAYPOINT_SCALE.into(),
+            color: WAYPOINT_COLOR.into(),
         },
         Geom {
             translate: Vec2 { x: 150.0, y: 150.0 }.into(),
-            scale: waypoint_scale.into(),
-            color: waypoint_color.into(),
+            scale: WAYPOINT_SCALE.into(),
+            color: WAYPOINT_COLOR.into(),
         },
         Geom {
             translate: Vec2 { x: 150.0, y: 100.0 }.into(),
-            scale: waypoint_scale.into(),
-            color: waypoint_color.into(),
+            scale: WAYPOINT_SCALE.into(),
+            color: WAYPOINT_COLOR.into(),
         },
         Geom {
             translate: Vec2 { x: -150.0, y: 100.0 }.into(),
-            scale: waypoint_scale.into(),
-            color: waypoint_color.into(),
+            scale: WAYPOINT_SCALE.into(),
+            color: WAYPOINT_COLOR.into(),
         },
         Geom {
             translate: Vec2 { x: -150.0, y: -150.0 }.into(),
-            scale: waypoint_scale.into(),
-            color: waypoint_color.into(),
+            scale: WAYPOINT_SCALE.into(),
+            color: WAYPOINT_COLOR.into(),
         },
         Geom {
             translate: Vec2 { x: -250.0, y: -150.0 }.into(),
-            scale: waypoint_scale.into(),
-            color: waypoint_color.into(),
+            scale: WAYPOINT_SCALE.into(),
+            color: WAYPOINT_COLOR.into(),
         },
         Geom {
             translate: Vec2 { x: -250.0, y: -250.0 }.into(),
-            scale: waypoint_scale.into(),
-            color: waypoint_color.into(),
+            scale: WAYPOINT_SCALE.into(),
+            color: WAYPOINT_COLOR.into(),
         },
         Geom {
             translate: Vec2 { x: -50.0, y: -250.0 }.into(),
-            scale: waypoint_scale.into(),
-            color: waypoint_color.into(),
+            scale: WAYPOINT_SCALE.into(),
+            color: WAYPOINT_COLOR.into(),
         },
         Geom {
             translate: Vec2::default().into(),
             scale: PLAYER_QUAD_SCALE.into(),
-            color: player_quad_color.into(),
+            color: PLAYER_QUAD_COLOR.into(),
         },
     ];
-    let player_quad_idx = quads.len() - 1;
-    let mut player_waypoint_idx = 5;
+
+    let nodes = {
+        let mut nodes: [Vec2<f32>; WAYPOINT_LEN] = [Vec2::default(); WAYPOINT_LEN];
+        for i in 0..WAYPOINT_LEN {
+            nodes[i] = quads[FIRST_WAYPOINT_INDEX + i].translate.0;
+        }
+        nodes
+    };
+
+    let edges = {
+        let mut edges: [(usize, usize); WAYPOINT_LEN] =
+            [(WAYPOINT_LEN, WAYPOINT_LEN); WAYPOINT_LEN];
+        for (i, edge) in edges.iter_mut().enumerate().take(WAYPOINT_LEN) {
+            *edge = (i, (i + 1) % WAYPOINT_LEN);
+        }
+        edges
+    };
 
     let mut weights = [[0.0; WAYPOINT_LEN]; WAYPOINT_LEN];
-    let mut nodes: [Vec2<f32>; WAYPOINT_LEN] = [Vec2::default(); WAYPOINT_LEN];
-    for i in 0..WAYPOINT_LEN {
-        nodes[i] = quads[FIRST_WAYPOINT_INDEX + i].translate.0;
-    }
-    let mut edges: [(usize, usize); WAYPOINT_LEN] = [(WAYPOINT_LEN, WAYPOINT_LEN); WAYPOINT_LEN];
+    pathfinding::init(&nodes, &edges, &mut weights);
+    let mut path: [usize; WAYPOINT_LEN] = [WAYPOINT_LEN; WAYPOINT_LEN];
 
-    #[allow(clippy::needless_range_loop)]
-    for i in 0..WAYPOINT_LEN {
-        edges[i] = (i, (i + 1) % WAYPOINT_LEN);
-    }
-
-    let mut lines = [
+    let mut lines: [Geom<f32>; LINES_LEN] = [
         Geom {
             translate: Vec2 { x: 100.0, y: 0.0 }.into(),
             scale: Vec2 { x: 310.0, y: 0.0 }.into(),
-            color: path_color.into(),
+            color: PATH_COLOR.into(),
         },
         Geom {
             translate: Vec2 { x: -50.0, y: -125.0 }.into(),
             scale: Vec2 { x: 0.0, y: 260.0 }.into(),
-            color: path_color.into(),
+            color: PATH_COLOR.into(),
         },
         Geom {
             translate: Vec2 { x: 250.0, y: 125.0 }.into(),
             scale: Vec2 { x: 0.0, y: 260.0 }.into(),
-            color: path_color.into(),
+            color: PATH_COLOR.into(),
         },
         Geom {
             translate: Vec2 { x: 200.0, y: 250.0 }.into(),
             scale: Vec2 { x: 110.0, y: 0.0 }.into(),
-            color: path_color.into(),
+            color: PATH_COLOR.into(),
         },
         Geom {
             translate: Vec2 { x: 150.0, y: 175.0 }.into(),
             scale: Vec2 { x: 0.0, y: 160.0 }.into(),
-            color: path_color.into(),
+            color: PATH_COLOR.into(),
         },
         Geom {
             translate: Vec2 { x: 0.0, y: 100.0 }.into(),
             scale: Vec2 { x: 310.0, y: 0.0 }.into(),
-            color: path_color.into(),
+            color: PATH_COLOR.into(),
         },
         Geom {
             translate: Vec2 { x: -150.0, y: -25.0 }.into(),
             scale: Vec2 { x: 0.0, y: 260.0 }.into(),
-            color: path_color.into(),
+            color: PATH_COLOR.into(),
         },
         Geom {
             translate: Vec2 { x: -200.0, y: -150.0 }.into(),
             scale: Vec2 { x: 110.0, y: 0.0 }.into(),
-            color: path_color.into(),
+            color: PATH_COLOR.into(),
         },
         Geom {
             translate: Vec2 { x: -150.0, y: -250.0 }.into(),
             scale: Vec2 { x: 210.0, y: 0.0 }.into(),
-            color: path_color.into(),
+            color: PATH_COLOR.into(),
         },
         Geom {
             translate: Vec2 { x: -250.0, y: -200.0 }.into(),
             scale: Vec2 { x: 0.0, y: 110.0 }.into(),
-            color: path_color.into(),
+            color: PATH_COLOR.into(),
         },
         Geom {
             translate: Vec2::default().into(),
             scale: Vec2::default().into(),
-            color: cursor_line_color.into(),
+            color: CURSOR_LINE_COLOR.into(),
         },
         Geom {
             translate: Vec2::default().into(),
             scale: Vec2::default().into(),
-            color: player_line_color.into(),
+            color: PLAYER_LINE_COLOR.into(),
         },
     ];
-    let cursor_line_idx = lines.len() - 2;
-    let player_line_idx = lines.len() - 1;
-
-    let quad_vertices = [
-        Vec2 { x: 0.5, y: 0.5 },
-        Vec2 { x: 0.5, y: -0.5 },
-        Vec2 { x: -0.5, y: 0.5 },
-        Vec2 { x: -0.5, y: -0.5 },
-    ];
-    let line_vertices = [Vec2 { x: -0.5, y: -0.5 }, Vec2 { x: 0.5, y: 0.5 }];
-
-    let line_width = 4.0;
 
     unsafe {
         println!("{}", CStr::from_ptr(ffi::glfwGetVersionString()).to_str().unwrap());
 
         ffi::glfwSetErrorCallback(callback_glfw_error);
-
         assert!(ffi::glfwInit() == 1);
-        defer!(ffi::glfwTerminate());
+    }
+    defer!(unsafe {
+        ffi::glfwTerminate();
+    });
 
+    unsafe {
         ffi::glfwWindowHint(ffi::GLFW_OPENGL_DEBUG_CONTEXT, 1);
         ffi::glfwWindowHint(ffi::GLFW_CONTEXT_VERSION_MAJOR, 3);
         ffi::glfwWindowHint(ffi::GLFW_CONTEXT_VERSION_MINOR, 3);
         ffi::glfwWindowHint(ffi::GLFW_OPENGL_PROFILE, ffi::GLFW_OPENGL_CORE_PROFILE);
         ffi::glfwWindowHint(ffi::GLFW_RESIZABLE, 0);
         ffi::glfwWindowHint(ffi::GLFW_SAMPLES, 16);
+    }
 
-        let window = ffi::glfwCreateWindow(
+    let window = unsafe {
+        ffi::glfwCreateWindow(
             WINDOW_WIDTH,
             WINDOW_HEIGHT,
             CString::new(std::module_path!())
@@ -669,11 +638,16 @@ fn main() {
                 .cast::<c_char>(),
             ptr::null_mut::<ffi::GLFWmonitor>(),
             ptr::null_mut::<ffi::GLFWwindow>(),
-        );
+        )
+    };
 
-        assert!(!window.is_null());
-        defer!(ffi::glfwDestroyWindow(window));
+    assert!(!window.is_null());
 
+    defer!(unsafe {
+        ffi::glfwDestroyWindow(window);
+    });
+
+    unsafe {
         ffi::glfwMakeContextCurrent(window);
         ffi::glfwSwapInterval(1);
         ffi::glfwSetKeyCallback(window, callback_glfw_key);
@@ -685,105 +659,129 @@ fn main() {
         ffi::glEnable(ffi::GL_BLEND);
         ffi::glBlendFunc(ffi::GL_SRC_ALPHA, ffi::GL_ONE_MINUS_SRC_ALPHA);
         ffi::glClearColor(
-            background_color.x,
-            background_color.y,
-            background_color.z,
-            background_color.w,
+            BACKGROUND_COLOR.x,
+            BACKGROUND_COLOR.y,
+            BACKGROUND_COLOR.z,
+            BACKGROUND_COLOR.w,
         );
         ffi::glEnable(ffi::GL_MULTISAMPLE);
         ffi::glViewport(0, 0, WINDOW_WIDTH, WINDOW_HEIGHT);
+    }
 
+    let vao = {
         let mut vao: [ffi::GLuint; 2] = [0; 2];
-        ffi::glGenVertexArrays(vao.len().try_into().unwrap(), vao.as_mut_ptr());
-        defer!(ffi::glDeleteVertexArrays(vao.len().try_into().unwrap(), vao.as_ptr()));
+        unsafe {
+            ffi::glGenVertexArrays(vao.len().try_into().unwrap(), vao.as_mut_ptr());
+        }
+        vao
+    };
+    defer!(unsafe {
+        ffi::glDeleteVertexArrays(vao.len().try_into().unwrap(), vao.as_ptr());
+    });
 
+    let vbo = {
         let mut vbo: [ffi::GLuint; 2] = [0; 2];
-        ffi::glGenBuffers(vbo.len().try_into().unwrap(), vbo.as_mut_ptr());
-        defer!(ffi::glDeleteBuffers(vbo.len().try_into().unwrap(), vbo.as_ptr()));
+        unsafe {
+            ffi::glGenBuffers(vbo.len().try_into().unwrap(), vbo.as_mut_ptr());
+        }
+        vbo
+    };
+    defer!(unsafe {
+        ffi::glDeleteBuffers(vbo.len().try_into().unwrap(), vbo.as_ptr());
+    });
 
+    let instance_vbo = unsafe {
         let mut instance_vbo: [ffi::GLuint; 2] = [0; 2];
         ffi::glGenBuffers(instance_vbo.len().try_into().unwrap(), instance_vbo.as_mut_ptr());
-        defer!(ffi::glDeleteBuffers(
-            instance_vbo.len().try_into().unwrap(),
-            instance_vbo.as_ptr()
-        ));
+        instance_vbo
+    };
+    defer!(unsafe {
+        ffi::glDeleteBuffers(instance_vbo.len().try_into().unwrap(), instance_vbo.as_ptr());
+    });
 
-        let program = create_program();
-        defer!(ffi::glDeleteProgram(program));
+    let program = create_program();
+    defer!(unsafe {
+        ffi::glDeleteProgram(program);
+    });
+
+    unsafe {
         ffi::glUseProgram(program);
 
-        ffi::glLineWidth(line_width);
+        ffi::glLineWidth(LINE_WIDTH);
         ffi::glEnable(ffi::GL_LINE_SMOOTH);
 
         uniform!(program, projection);
+    }
 
-        buffers_and_attributes(program, vao[0], vbo[0], instance_vbo[0], &quads, &quad_vertices);
-        buffers_and_attributes(program, vao[1], vbo[1], instance_vbo[1], &lines, &line_vertices);
+    buffers_and_attributes(program, vao[0], vbo[0], instance_vbo[0], &quads, &QUAD_VERTICES);
+    buffers_and_attributes(program, vao[1], vbo[1], instance_vbo[1], &lines, &LINE_VERTICES);
 
-        let mut world_cursor = Vec2::default();
-        let mut now = time::Instant::now();
-        let mut frames = 0;
+    let mut now = time::Instant::now();
+    let mut frames = 0;
 
-        println!("\n\n\n\n");
-        while ffi::glfwWindowShouldClose(window) != 1 {
-            let elapsed = now.elapsed();
-            if 0 < elapsed.as_secs() {
-                println!(
-                    "\x1B[5A\
-                     {:12.2} elapsed ns\n\
-                     {frames:12} frames\n\
-                     {:12} ns / frame\n\
-                     {:12.2} world_cursor.x\n\
-                     {:12.2} world_cursor.y",
-                    elapsed.as_nanos(),
-                    elapsed.as_nanos() / frames,
-                    world_cursor.x,
-                    world_cursor.y,
-                );
-                now = time::Instant::now();
-                frames = 0;
-            }
-
-            ffi::glfwPollEvents();
-
-            update_camera(window, &mut camera, &mut camera_speed);
-            let cursor_waypoint_idx =
-                update_cursor(window, camera, &mut world_cursor, &quads, &inverse_projection);
-            update_player(
-                &mut quads,
-                &mut weights,
-                &nodes,
-                &edges,
-                &mut player_speed,
-                player_quad_idx,
-                &mut player_waypoint_idx,
-                cursor_waypoint_idx,
+    println!("\n\n\n\n");
+    while unsafe { ffi::glfwWindowShouldClose(window) } != 1 {
+        let elapsed = now.elapsed();
+        if 0 < elapsed.as_secs() {
+            println!(
+                "\x1B[5A\
+                 {:12.2} elapsed ns\n\
+                 {frames:12} frames\n\
+                 {:12} ns / frame\n\
+                 {:12.2} world_cursor.x\n\
+                 {:12.2} world_cursor.y",
+                elapsed.as_nanos(),
+                elapsed.as_nanos() / frames,
+                world_cursor.x,
+                world_cursor.y,
             );
-            update_lines(
-                &quads,
-                &mut lines,
-                player_speed,
-                player_quad_idx,
-                player_line_idx,
-                world_cursor,
-                cursor_line_idx,
-            );
-
-            quads[cursor_waypoint_idx].color.0.x = 1.0;
-
-            let view = math::look_at(camera, Vec3 { z: 0.0, ..camera }, VIEW_UP);
-            uniform!(program, view);
-
-            ffi::glClear(ffi::GL_COLOR_BUFFER_BIT);
-
-            bind_and_draw(vao[0], instance_vbo[0], &quads, &quad_vertices, ffi::GL_TRIANGLE_STRIP);
-            bind_and_draw(vao[1], instance_vbo[1], &lines, &line_vertices, ffi::GL_LINES);
-
-            ffi::glfwSwapBuffers(window);
-
-            quads[cursor_waypoint_idx].color.0.x = waypoint_color.x;
-
-            frames += 1;
+            now = time::Instant::now();
+            frames = 0;
         }
+
+        unsafe {
+            ffi::glfwPollEvents();
+        }
+
+        update_camera(window, &mut camera, &mut camera_speed);
+        update_cursor(window, &inverse_projection, &mut world_cursor);
+
+        world_cursor.x += camera.x;
+        world_cursor.y += camera.y;
+
+        let cursor_waypoint_idx = geom::nearest(
+            &quads[FIRST_WAYPOINT_INDEX..(FIRST_WAYPOINT_INDEX + WAYPOINT_LEN)],
+            world_cursor,
+        ) + FIRST_WAYPOINT_INDEX;
+
+        update_player(
+            &mut quads,
+            &weights,
+            &mut path,
+            &mut player_speed,
+            &mut player_waypoint_idx,
+            cursor_waypoint_idx,
+        );
+        update_lines(&quads, &mut lines, player_speed, world_cursor);
+
+        quads[cursor_waypoint_idx].color.0 = WAYPOINT_HIGHLIGHT_COLOR;
+
+        let view = math::look_at(camera, Vec3 { z: 0.0, ..camera }, VIEW_UP);
+
+        unsafe {
+            uniform!(program, view);
+            ffi::glClear(ffi::GL_COLOR_BUFFER_BIT);
+        }
+
+        bind_and_draw(vao[0], instance_vbo[0], &quads, &QUAD_VERTICES, ffi::GL_TRIANGLE_STRIP);
+        bind_and_draw(vao[1], instance_vbo[1], &lines, &LINE_VERTICES, ffi::GL_LINES);
+
+        unsafe {
+            ffi::glfwSwapBuffers(window);
+        }
+
+        quads[cursor_waypoint_idx].color.0 = WAYPOINT_COLOR;
+
+        frames += 1;
     }
 }

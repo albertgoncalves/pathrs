@@ -1,4 +1,4 @@
-use crate::math::{Rotate, Vec2, Vec4};
+use crate::math::{Distance, Rotate, Vec2, Vec4};
 
 #[repr(C)]
 #[derive(Clone, Copy, Default)]
@@ -66,4 +66,19 @@ impl Line<f32> {
         line.1.rotate(point, radians);
         line
     }
+}
+
+pub fn nearest(geoms: &[Geom<f32>], point: Vec2<f32>) -> usize {
+    let mut min_gap = f32::INFINITY;
+    let mut index = geoms.len();
+
+    for (i, neighbor) in geoms.iter().enumerate() {
+        let gap = point.distance(neighbor.translate.0);
+        if gap < min_gap {
+            min_gap = gap;
+            index = i;
+        }
+    }
+
+    index
 }

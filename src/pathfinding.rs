@@ -24,26 +24,17 @@ impl Ord for Node<f32> {
     }
 }
 
-#[allow(clippy::needless_range_loop)]
-pub fn dijkstra<const N: usize, T: Distance<f32> + Copy>(
-    weights: &mut [[f32; N]; N],
+pub fn init<const N: usize, T: Distance<f32> + Copy>(
     nodes: &[T],
     edges: &[(usize, usize)],
-    start: usize,
-    end: usize,
-) -> Vec<usize> {
-    if start == end {
-        return vec![start];
-    }
-
-    let n = nodes.len();
-
-    for i in 0..n {
-        for j in 0..n {
+    weights: &mut [[f32; N]; N],
+) {
+    for (i, row) in weights.iter_mut().enumerate().take(N) {
+        for (j, cell) in row.iter_mut().enumerate().take(N) {
             if i == j {
-                weights[i][j] = 0.0;
+                *cell = 0.0;
             } else {
-                weights[i][j] = f32::INFINITY;
+                *cell = f32::INFINITY;
             }
         }
     }
@@ -53,9 +44,16 @@ pub fn dijkstra<const N: usize, T: Distance<f32> + Copy>(
         weights[*i][*j] = weight;
         weights[*j][*i] = weight;
     }
+}
 
-    let mut costs: Vec<f32> = vec![f32::INFINITY; n];
-    let mut path: Vec<usize> = vec![n; n];
+pub fn dijkstra<const N: usize>(
+    weights: &[[f32; N]; N],
+    start: usize,
+    end: usize,
+    path: &mut [usize; N],
+) -> usize {
+    let mut costs: [f32; N] = [f32::INFINITY; N];
+    let mut previous: [usize; N] = [N; N];
 
     // NOTE: See `https://doc.rust-lang.org/std/collections/binary_heap/index.html`.
     let mut heap: BinaryHeap<Node<f32>> = BinaryHeap::new();
@@ -69,7 +67,7 @@ pub fn dijkstra<const N: usize, T: Distance<f32> + Copy>(
         if costs[node.index] < node.cost {
             continue;
         }
-        for i in 0..n {
+        for i in 0..N {
             if node.index == i {
                 continue;
             }
@@ -79,22 +77,21 @@ pub fn dijkstra<const N: usize, T: Distance<f32> + Copy>(
             let cost = node.cost + weights[node.index][i];
             if cost < costs[i] {
                 heap.push(Node { index: i, cost });
-                path[i] = node.index;
+                previous[i] = node.index;
                 costs[i] = cost;
             }
         }
     }
 
-    let mut solution = vec![];
     let mut i = end;
-    loop {
-        solution.push(i);
-        i = path[i];
-        if i == start {
-            break;
-        }
+    let mut j = 0;
+    while i != start {
+        path[j] = i;
+        j += 1;
+        i = previous[i];
     }
-    solution.push(start);
-    solution.reverse();
-    solution
+    path[j] = start;
+    j += 1;
+    path[..j].reverse();
+    j
 }
