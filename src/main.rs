@@ -7,7 +7,7 @@ mod prelude;
 
 use crate::defer::Defer;
 use crate::geom::{Geom, Line};
-use crate::math::{Distance, Dot, Mat4, Normalize, Vec2, Vec3, Vec4};
+use crate::math::{Dot, Mat4, Normalize, Vec2, Vec3, Vec4};
 use std::convert::TryInto;
 use std::ffi::{c_char, c_int, c_void, CStr, CString};
 use std::fs::read_to_string;
@@ -281,6 +281,7 @@ fn update_camera(
     camera_speed: &mut Vec2<f32>,
 ) {
     let mut step: Vec2<f32> = Vec2::default();
+
     if pressed(window, ffi::GLFW_KEY_W) {
         step.y += 1.0;
     }
@@ -293,6 +294,7 @@ fn update_camera(
     if pressed(window, ffi::GLFW_KEY_D) {
         step.x += 1.0;
     }
+
     *camera_speed += step.normalize() * CAMERA_ACCEL.into();
     *camera_speed *= CAMERA_DRAG.into();
 
@@ -305,6 +307,7 @@ fn unproject_cursor(window: *mut ffi::GLFWwindow, inverse_projection: &Mat4<f32>
     unsafe {
         ffi::glfwGetCursorPos(window, &mut screen_cursor.x, &mut screen_cursor.y);
     }
+
     screen_cursor.x /= f64::from(WINDOW_WIDTH);
     screen_cursor.y /= f64::from(WINDOW_HEIGHT);
     screen_cursor -= 0.5.into();
@@ -337,12 +340,10 @@ fn update_player<const N: usize>(
         path,
     );
 
-    let distance = |i: usize, j: usize| quads[i].translate.0.distance(quads[j].translate.0);
-
-    let mut gap = distance(*player_waypoint_idx, PLAYER_QUAD_IDX);
+    let mut gap = geom::distance(quads, *player_waypoint_idx, PLAYER_QUAD_IDX);
     if (1 < path_len) && (gap <= (PLAYER_QUAD_SCALE / 2.0)) {
         *player_waypoint_idx = FIRST_WAYPOINT_INDEX + path[1];
-        gap = distance(*player_waypoint_idx, PLAYER_QUAD_IDX);
+        gap = geom::distance(quads, *player_waypoint_idx, PLAYER_QUAD_IDX);
     }
 
     if (PLAYER_QUAD_SCALE / 2.0) < gap {

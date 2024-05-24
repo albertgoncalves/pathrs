@@ -68,6 +68,13 @@ impl Line<f32> {
     }
 }
 
+pub fn distance<T: Copy>(geoms: &[Geom<T>], i: usize, j: usize) -> T
+where
+    Vec2<T>: Distance<T>,
+{
+    geoms[i].translate.0.distance(geoms[j].translate.0)
+}
+
 pub fn nearest(geoms: &[Geom<f32>], point: Vec2<f32>) -> usize {
     let mut min_gap = f32::INFINITY;
     let mut index = geoms.len();
