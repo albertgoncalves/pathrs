@@ -1,3 +1,5 @@
+use std::ops;
+
 #[repr(C)]
 #[derive(Clone, Copy, Default)]
 pub struct Vec2<T> {
@@ -17,7 +19,7 @@ impl<T: Copy> From<T> for Vec2<T> {
     }
 }
 
-impl<T: std::ops::Add<Output = T>> std::ops::Add for Vec2<T> {
+impl<T: ops::Add<Output = T>> ops::Add for Vec2<T> {
     type Output = Self;
 
     fn add(self, other: Self) -> Self {
@@ -28,14 +30,14 @@ impl<T: std::ops::Add<Output = T>> std::ops::Add for Vec2<T> {
     }
 }
 
-impl<T: std::ops::AddAssign> std::ops::AddAssign for Vec2<T> {
+impl<T: ops::AddAssign> ops::AddAssign for Vec2<T> {
     fn add_assign(&mut self, other: Self) {
         self.x += other.x;
         self.y += other.y;
     }
 }
 
-impl<T: std::ops::Sub<Output = T>> std::ops::Sub for Vec2<T> {
+impl<T: ops::Sub<Output = T>> ops::Sub for Vec2<T> {
     type Output = Self;
 
     fn sub(self, other: Self) -> Self {
@@ -46,14 +48,14 @@ impl<T: std::ops::Sub<Output = T>> std::ops::Sub for Vec2<T> {
     }
 }
 
-impl<T: std::ops::SubAssign> std::ops::SubAssign for Vec2<T> {
+impl<T: ops::SubAssign> ops::SubAssign for Vec2<T> {
     fn sub_assign(&mut self, other: Self) {
         self.x -= other.x;
         self.y -= other.y;
     }
 }
 
-impl<T: std::ops::Mul<Output = T>> std::ops::Mul for Vec2<T> {
+impl<T: ops::Mul<Output = T>> ops::Mul for Vec2<T> {
     type Output = Self;
 
     fn mul(self, other: Self) -> Self {
@@ -64,14 +66,14 @@ impl<T: std::ops::Mul<Output = T>> std::ops::Mul for Vec2<T> {
     }
 }
 
-impl<T: std::ops::MulAssign> std::ops::MulAssign for Vec2<T> {
+impl<T: ops::MulAssign> ops::MulAssign for Vec2<T> {
     fn mul_assign(&mut self, other: Self) {
         self.x *= other.x;
         self.y *= other.y;
     }
 }
 
-impl<T: std::ops::DivAssign> std::ops::DivAssign for Vec2<T> {
+impl<T: ops::DivAssign> ops::DivAssign for Vec2<T> {
     fn div_assign(&mut self, other: Self) {
         self.x /= other.x;
         self.y /= other.y;
@@ -92,7 +94,7 @@ impl<T: Copy> From<T> for Vec3<T> {
     }
 }
 
-impl<T: std::ops::Mul<Output = T>> std::ops::Mul for Vec3<T> {
+impl<T: ops::Mul<Output = T>> ops::Mul for Vec3<T> {
     type Output = Self;
 
     fn mul(self, other: Self) -> Self {
@@ -104,7 +106,7 @@ impl<T: std::ops::Mul<Output = T>> std::ops::Mul for Vec3<T> {
     }
 }
 
-impl<T: std::ops::Sub<Output = T>> std::ops::Sub for Vec3<T> {
+impl<T: ops::Sub<Output = T>> ops::Sub for Vec3<T> {
     type Output = Self;
 
     fn sub(self, other: Self) -> Self {
@@ -305,7 +307,7 @@ pub trait Normalize {
     fn normalize(self) -> Self;
 }
 
-impl<T: Dot<T, f32> + std::ops::Mul<Output = T> + From<f32> + Copy> Normalize for T {
+impl<T: Dot<T, f32> + ops::Mul<Output = T> + From<f32> + Copy> Normalize for T {
     fn normalize(self) -> Self {
         self * (1.0 / (self.dot(self) + f32::EPSILON).sqrt()).into()
     }
@@ -315,7 +317,7 @@ pub trait Distance<T> {
     fn distance(self, other: Self) -> T;
 }
 
-impl<T: Dot<T, f32> + std::ops::Sub<Output = T> + Copy> Distance<f32> for T {
+impl<T: Dot<T, f32> + ops::Sub<Output = T> + Copy> Distance<f32> for T {
     fn distance(self, other: Self) -> f32 {
         let delta: Self = self - other;
         (delta.dot(delta) + f32::EPSILON).sqrt()
