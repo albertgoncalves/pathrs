@@ -37,30 +37,28 @@ const VIEW_UP: Vec3<f32> = Vec3 { x: 0.0, y: 1.0, z: 0.0 };
 
 const LINE_WIDTH: f32 = 4.0;
 
-const FIRST_WAYPOINT_INDEX: usize = 5;
-const WAYPOINT_LEN: usize = 22 - FIRST_WAYPOINT_INDEX;
-
-const WAYPOINT_SCALE: f32 = 15.0;
-
 const PLAYER_ACCEL: f32 = 2.125;
 const PLAYER_DRAG: f32 = 0.725;
 
 const PLAYER_QUAD_SCALE: f32 = 25.0;
 const PLAYER_LINE_SCALE: f32 = 6.75;
+const WAYPOINT_SCALE: f32 = 15.0;
 
-const QUADS_LEN: usize = 23;
-const PLAYER_QUAD_IDX: usize = QUADS_LEN - 1;
+const QUADS_LEN: usize = 46;
+const PLAYER_QUAD_IDX: usize = 0;
+const FIRST_WAYPOINT_IDX: usize = 6;
+const WAYPOINT_LEN: usize = QUADS_LEN - FIRST_WAYPOINT_IDX;
 
 const LINES_LEN: usize = 12;
-const PLAYER_LINE_IDX: usize = LINES_LEN - 1;
-const CURSOR_LINE_IDX: usize = LINES_LEN - 2;
+const PLAYER_LINE_IDX: usize = 0;
+const CURSOR_LINE_IDX: usize = 1;
 
-const PLAYER_QUAD_COLOR: Vec4<f32> = Vec4 { x: 1.0, y: 0.5, z: 0.75, w: 1.0 };
-const PLAYER_LINE_COLOR: Vec4<f32> = Vec4 { w: 0.375, ..PLAYER_QUAD_COLOR };
-const CURSOR_LINE_COLOR: Vec4<f32> = Vec4 { w: 0.15, ..PLAYER_QUAD_COLOR };
 const BACKGROUND_COLOR: Vec4<f32> = Vec4 { x: 0.1, y: 0.09, z: 0.11, w: 1.0 };
 const WALL_COLOR: Vec4<f32> = Vec4 { x: 1.0, y: 1.0, z: 1.0, w: 0.9 };
 const PATH_COLOR: Vec4<f32> = Vec4 { x: 0.6, y: 0.85, z: 0.9, w: 0.0375 };
+const PLAYER_QUAD_COLOR: Vec4<f32> = Vec4 { x: 1.0, y: 0.5, z: 0.75, w: 1.0 };
+const PLAYER_LINE_COLOR: Vec4<f32> = Vec4 { w: 0.375, ..PLAYER_QUAD_COLOR };
+const CURSOR_LINE_COLOR: Vec4<f32> = Vec4 { w: 0.15, ..PLAYER_QUAD_COLOR };
 const WAYPOINT_COLOR: Vec4<f32> = Vec4 { x: 0.4, y: 0.875, z: 0.9, w: 0.2 };
 const WAYPOINT_HIGHLIGHT_COLOR: Vec4<f32> = Vec4 { x: 1.0, ..WAYPOINT_COLOR };
 
@@ -335,14 +333,14 @@ fn update_player<const N: usize>(
 ) {
     let path_len = pathfinding::dijkstra(
         weights,
-        *player_waypoint_idx - FIRST_WAYPOINT_INDEX,
-        cursor_waypoint_idx - FIRST_WAYPOINT_INDEX,
+        *player_waypoint_idx - FIRST_WAYPOINT_IDX,
+        cursor_waypoint_idx - FIRST_WAYPOINT_IDX,
         path,
     );
 
     let mut gap = geom::distance(quads, *player_waypoint_idx, PLAYER_QUAD_IDX);
     if (1 < path_len) && (gap <= (PLAYER_QUAD_SCALE / 2.0)) {
-        *player_waypoint_idx = FIRST_WAYPOINT_INDEX + path[1];
+        *player_waypoint_idx = FIRST_WAYPOINT_IDX + path[1];
         gap = geom::distance(quads, *player_waypoint_idx, PLAYER_QUAD_IDX);
     }
 
@@ -387,11 +385,16 @@ fn main() {
     let mut player_speed: Vec2<f32> = Vec2::default();
     let mut camera_speed: Vec2<f32> = Vec2::default();
 
-    let mut player_waypoint_idx = 5;
+    let mut player_waypoint_idx = FIRST_WAYPOINT_IDX;
 
     let mut world_cursor = Vec2::default();
 
     let mut quads: [Geom<f32>; QUADS_LEN] = [
+        Geom {
+            translate: Vec2::default().into(),
+            scale: PLAYER_QUAD_SCALE.into(),
+            color: PLAYER_QUAD_COLOR.into(),
+        },
         Geom {
             translate: Vec2::default().into(),
             scale: Vec2 { x: 600.0, y: 600.0 }.into(),
@@ -425,6 +428,31 @@ fn main() {
         },
         Geom {
             translate: Vec2 { x: -50.0, y: 0.0 }.into(),
+            scale: WAYPOINT_SCALE.into(),
+            color: WAYPOINT_COLOR.into(),
+        },
+        Geom {
+            translate: Vec2 { x: 0.0, y: 0.0 }.into(),
+            scale: WAYPOINT_SCALE.into(),
+            color: WAYPOINT_COLOR.into(),
+        },
+        Geom {
+            translate: Vec2 { x: 50.0, y: 0.0 }.into(),
+            scale: WAYPOINT_SCALE.into(),
+            color: WAYPOINT_COLOR.into(),
+        },
+        Geom {
+            translate: Vec2 { x: 100.0, y: 0.0 }.into(),
+            scale: WAYPOINT_SCALE.into(),
+            color: WAYPOINT_COLOR.into(),
+        },
+        Geom {
+            translate: Vec2 { x: 150.0, y: 0.0 }.into(),
+            scale: WAYPOINT_SCALE.into(),
+            color: WAYPOINT_COLOR.into(),
+        },
+        Geom {
+            translate: Vec2 { x: 200.0, y: 0.0 }.into(),
             scale: WAYPOINT_SCALE.into(),
             color: WAYPOINT_COLOR.into(),
         },
@@ -484,7 +512,52 @@ fn main() {
             color: WAYPOINT_COLOR.into(),
         },
         Geom {
+            translate: Vec2 { x: 100.0, y: 100.0 }.into(),
+            scale: WAYPOINT_SCALE.into(),
+            color: WAYPOINT_COLOR.into(),
+        },
+        Geom {
+            translate: Vec2 { x: 50.0, y: 100.0 }.into(),
+            scale: WAYPOINT_SCALE.into(),
+            color: WAYPOINT_COLOR.into(),
+        },
+        Geom {
+            translate: Vec2 { x: 0.0, y: 100.0 }.into(),
+            scale: WAYPOINT_SCALE.into(),
+            color: WAYPOINT_COLOR.into(),
+        },
+        Geom {
+            translate: Vec2 { x: -50.0, y: 100.0 }.into(),
+            scale: WAYPOINT_SCALE.into(),
+            color: WAYPOINT_COLOR.into(),
+        },
+        Geom {
+            translate: Vec2 { x: -100.0, y: 100.0 }.into(),
+            scale: WAYPOINT_SCALE.into(),
+            color: WAYPOINT_COLOR.into(),
+        },
+        Geom {
             translate: Vec2 { x: -150.0, y: 100.0 }.into(),
+            scale: WAYPOINT_SCALE.into(),
+            color: WAYPOINT_COLOR.into(),
+        },
+        Geom {
+            translate: Vec2 { x: -150.0, y: 50.0 }.into(),
+            scale: WAYPOINT_SCALE.into(),
+            color: WAYPOINT_COLOR.into(),
+        },
+        Geom {
+            translate: Vec2 { x: -150.0, y: 0.0 }.into(),
+            scale: WAYPOINT_SCALE.into(),
+            color: WAYPOINT_COLOR.into(),
+        },
+        Geom {
+            translate: Vec2 { x: -150.0, y: -50.0 }.into(),
+            scale: WAYPOINT_SCALE.into(),
+            color: WAYPOINT_COLOR.into(),
+        },
+        Geom {
+            translate: Vec2 { x: -150.0, y: -100.0 }.into(),
             scale: WAYPOINT_SCALE.into(),
             color: WAYPOINT_COLOR.into(),
         },
@@ -494,7 +567,17 @@ fn main() {
             color: WAYPOINT_COLOR.into(),
         },
         Geom {
+            translate: Vec2 { x: -200.0, y: -150.0 }.into(),
+            scale: WAYPOINT_SCALE.into(),
+            color: WAYPOINT_COLOR.into(),
+        },
+        Geom {
             translate: Vec2 { x: -250.0, y: -150.0 }.into(),
+            scale: WAYPOINT_SCALE.into(),
+            color: WAYPOINT_COLOR.into(),
+        },
+        Geom {
+            translate: Vec2 { x: -250.0, y: -200.0 }.into(),
             scale: WAYPOINT_SCALE.into(),
             color: WAYPOINT_COLOR.into(),
         },
@@ -504,21 +587,51 @@ fn main() {
             color: WAYPOINT_COLOR.into(),
         },
         Geom {
+            translate: Vec2 { x: -200.0, y: -250.0 }.into(),
+            scale: WAYPOINT_SCALE.into(),
+            color: WAYPOINT_COLOR.into(),
+        },
+        Geom {
+            translate: Vec2 { x: -150.0, y: -250.0 }.into(),
+            scale: WAYPOINT_SCALE.into(),
+            color: WAYPOINT_COLOR.into(),
+        },
+        Geom {
+            translate: Vec2 { x: -100.0, y: -250.0 }.into(),
+            scale: WAYPOINT_SCALE.into(),
+            color: WAYPOINT_COLOR.into(),
+        },
+        Geom {
             translate: Vec2 { x: -50.0, y: -250.0 }.into(),
             scale: WAYPOINT_SCALE.into(),
             color: WAYPOINT_COLOR.into(),
         },
         Geom {
-            translate: Vec2::default().into(),
-            scale: PLAYER_QUAD_SCALE.into(),
-            color: PLAYER_QUAD_COLOR.into(),
+            translate: Vec2 { x: -50.0, y: -200.0 }.into(),
+            scale: WAYPOINT_SCALE.into(),
+            color: WAYPOINT_COLOR.into(),
+        },
+        Geom {
+            translate: Vec2 { x: -50.0, y: -150.0 }.into(),
+            scale: WAYPOINT_SCALE.into(),
+            color: WAYPOINT_COLOR.into(),
+        },
+        Geom {
+            translate: Vec2 { x: -50.0, y: -100.0 }.into(),
+            scale: WAYPOINT_SCALE.into(),
+            color: WAYPOINT_COLOR.into(),
+        },
+        Geom {
+            translate: Vec2 { x: -50.0, y: -50.0 }.into(),
+            scale: WAYPOINT_SCALE.into(),
+            color: WAYPOINT_COLOR.into(),
         },
     ];
 
     let nodes = {
         let mut nodes: [Vec2<f32>; WAYPOINT_LEN] = [Vec2::default(); WAYPOINT_LEN];
         for i in 0..WAYPOINT_LEN {
-            nodes[i] = quads[FIRST_WAYPOINT_INDEX + i].translate.0;
+            nodes[i] = quads[FIRST_WAYPOINT_IDX + i].translate.0;
         }
         nodes
     };
@@ -536,6 +649,16 @@ fn main() {
     let mut path: [usize; WAYPOINT_LEN] = [0; WAYPOINT_LEN];
 
     let mut lines: [Geom<f32>; LINES_LEN] = [
+        Geom {
+            translate: Vec2::default().into(),
+            scale: Vec2::default().into(),
+            color: PLAYER_LINE_COLOR.into(),
+        },
+        Geom {
+            translate: Vec2::default().into(),
+            scale: Vec2::default().into(),
+            color: CURSOR_LINE_COLOR.into(),
+        },
         Geom {
             translate: Vec2 { x: 100.0, y: 0.0 }.into(),
             scale: Vec2 { x: 310.0, y: 0.0 }.into(),
@@ -585,16 +708,6 @@ fn main() {
             translate: Vec2 { x: -250.0, y: -200.0 }.into(),
             scale: Vec2 { x: 0.0, y: 110.0 }.into(),
             color: PATH_COLOR.into(),
-        },
-        Geom {
-            translate: Vec2::default().into(),
-            scale: Vec2::default().into(),
-            color: CURSOR_LINE_COLOR.into(),
-        },
-        Geom {
-            translate: Vec2::default().into(),
-            scale: Vec2::default().into(),
-            color: PLAYER_LINE_COLOR.into(),
         },
     ];
 
@@ -740,9 +853,9 @@ fn main() {
         world_cursor.y = screen_cursor.y.mul_add(VIEW_DISTANCE, camera.y);
 
         let cursor_waypoint_idx = geom::nearest(
-            &quads[FIRST_WAYPOINT_INDEX..(FIRST_WAYPOINT_INDEX + WAYPOINT_LEN)],
+            &quads[FIRST_WAYPOINT_IDX..(FIRST_WAYPOINT_IDX + WAYPOINT_LEN)],
             world_cursor,
-        ) + FIRST_WAYPOINT_INDEX;
+        ) + FIRST_WAYPOINT_IDX;
 
         update_player(
             &mut quads,
