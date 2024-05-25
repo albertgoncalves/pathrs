@@ -3,7 +3,7 @@ use std::cmp;
 use std::collections::BinaryHeap;
 
 #[derive(Copy, Clone, PartialEq)]
-struct Node<T> {
+pub struct Node<T> {
     index: usize,
     cost: T,
 }
@@ -46,8 +46,10 @@ pub fn init<const N: usize, T: Distance<f32> + Copy>(
     }
 }
 
+// NOTE: See `https://doc.rust-lang.org/std/collections/binary_heap/index.html`.
 pub fn dijkstra<const N: usize>(
     weights: &[[f32; N]; N],
+    heap: &mut BinaryHeap<Node<f32>>,
     start: usize,
     end: usize,
     path: &mut [usize; N],
@@ -55,8 +57,7 @@ pub fn dijkstra<const N: usize>(
     let mut costs: [f32; N] = [f32::INFINITY; N];
     let mut previous: [usize; N] = [N; N];
 
-    // NOTE: See `https://doc.rust-lang.org/std/collections/binary_heap/index.html`.
-    let mut heap: BinaryHeap<Node<f32>> = BinaryHeap::new();
+    heap.clear();
     costs[start] = 0.0;
 
     heap.push(Node { index: start, cost: 0.0 });

@@ -8,6 +8,7 @@ mod prelude;
 use crate::defer::Defer;
 use crate::geom::{Geom, Line};
 use crate::math::{Dot, Mat4, Normalize, Vec2, Vec3, Vec4};
+use std::collections::BinaryHeap;
 use std::convert::TryInto;
 use std::ffi::{c_char, c_int, c_void, CStr, CString};
 use std::fs::read_to_string;
@@ -326,6 +327,7 @@ fn unproject_cursor(window: *mut ffi::GLFWwindow, inverse_projection: &Mat4<f32>
 fn update_player<const N: usize>(
     quads: &mut [Geom<f32>],
     weights: &[[f32; N]; N],
+    heap: &mut BinaryHeap<pathfinding::Node<f32>>,
     path: &mut [usize; N],
     player_speed: &mut Vec2<f32>,
     player_waypoint_idx: &mut usize,
@@ -333,6 +335,7 @@ fn update_player<const N: usize>(
 ) {
     let path_len = pathfinding::dijkstra(
         weights,
+        heap,
         *player_waypoint_idx - FIRST_WAYPOINT_IDX,
         cursor_waypoint_idx - FIRST_WAYPOINT_IDX,
         path,
@@ -646,6 +649,7 @@ fn main() {
 
     let mut weights = [[0.0; WAYPOINT_LEN]; WAYPOINT_LEN];
     pathfinding::init(&nodes, &edges, &mut weights);
+    let mut heap: BinaryHeap<pathfinding::Node<f32>> = BinaryHeap::with_capacity(WAYPOINT_LEN);
     let mut path: [usize; WAYPOINT_LEN] = [0; WAYPOINT_LEN];
 
     let mut lines: [Geom<f32>; LINES_LEN] = [
@@ -860,6 +864,7 @@ fn main() {
         update_player(
             &mut quads,
             &weights,
+            &mut heap,
             &mut path,
             &mut player_speed,
             &mut player_waypoint_idx,
