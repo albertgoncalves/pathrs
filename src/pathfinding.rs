@@ -92,6 +92,8 @@ pub fn dijkstra<const N: usize>(
     }
     path[j] = start;
     j += 1;
+
     path[..j].reverse();
+
     j
 }

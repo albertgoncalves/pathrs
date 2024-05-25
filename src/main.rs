@@ -524,8 +524,7 @@ fn main() {
     };
 
     let edges = {
-        let mut edges: [(usize, usize); WAYPOINT_LEN] =
-            [(WAYPOINT_LEN, WAYPOINT_LEN); WAYPOINT_LEN];
+        let mut edges: [(usize, usize); WAYPOINT_LEN] = [(0, 0); WAYPOINT_LEN];
         for (i, edge) in edges.iter_mut().enumerate().take(WAYPOINT_LEN) {
             *edge = (i, (i + 1) % WAYPOINT_LEN);
         }
@@ -534,7 +533,7 @@ fn main() {
 
     let mut weights = [[0.0; WAYPOINT_LEN]; WAYPOINT_LEN];
     pathfinding::init(&nodes, &edges, &mut weights);
-    let mut path: [usize; WAYPOINT_LEN] = [WAYPOINT_LEN; WAYPOINT_LEN];
+    let mut path: [usize; WAYPOINT_LEN] = [0; WAYPOINT_LEN];
 
     let mut lines: [Geom<f32>; LINES_LEN] = [
         Geom {
