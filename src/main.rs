@@ -41,6 +41,8 @@ const LINE_WIDTH: f32 = 4.0;
 const PLAYER_ACCEL: f32 = 2.125;
 const PLAYER_DRAG: f32 = 0.725;
 
+const FLOOR_SCALE: Vec2<f32> = Vec2 { x: 600.0, y: 600.0 };
+
 const PLAYER_QUAD_SCALE: f32 = 25.0;
 const PLAYER_LINE_SCALE: f32 = 6.75;
 const WAYPOINT_SCALE: f32 = 15.0;
@@ -48,13 +50,21 @@ const WAYPOINT_SCALE: f32 = 15.0;
 const QUADS_LEN: usize = 46;
 const PLAYER_QUAD_IDX: usize = 0;
 const FIRST_WAYPOINT_IDX: usize = 6;
-const WAYPOINT_LEN: usize = QUADS_LEN - FIRST_WAYPOINT_IDX;
+const WAYPOINTS_LEN: usize = QUADS_LEN - FIRST_WAYPOINT_IDX;
 
 const LINES_LEN: usize = 12;
 const PLAYER_LINE_IDX: usize = 0;
 const CURSOR_LINE_IDX: usize = 1;
+const FIRST_PATH_IDX: usize = 2;
+const PATHS_LEN: usize = LINES_LEN - FIRST_PATH_IDX;
 
 const BACKGROUND_COLOR: Vec4<f32> = Vec4 { x: 0.1, y: 0.09, z: 0.11, w: 1.0 };
+const FLOOR_COLOR: Vec4<f32> = Vec4 {
+    x: 0.325,
+    y: 0.375,
+    z: 0.525,
+    w: 0.25,
+};
 const WALL_COLOR: Vec4<f32> = Vec4 { x: 1.0, y: 1.0, z: 1.0, w: 0.9 };
 const PATH_COLOR: Vec4<f32> = Vec4 { x: 0.6, y: 0.85, z: 0.9, w: 0.0375 };
 const PLAYER_QUAD_COLOR: Vec4<f32> = Vec4 { x: 1.0, y: 0.5, z: 0.75, w: 1.0 };
@@ -400,14 +410,8 @@ fn main() {
         },
         Geom {
             translate: Vec2::default().into(),
-            scale: Vec2 { x: 600.0, y: 600.0 }.into(),
-            color: Vec4 {
-                x: 0.325,
-                y: 0.375,
-                z: 0.525,
-                w: 0.25,
-            }
-            .into(),
+            scale: FLOOR_SCALE.into(),
+            color: FLOOR_COLOR.into(),
         },
         Geom {
             translate: Vec2 { x: 50.0, y: 50.0 }.into(),
@@ -632,88 +636,59 @@ fn main() {
     ];
 
     let nodes = {
-        let mut nodes: [Vec2<f32>; WAYPOINT_LEN] = [Vec2::default(); WAYPOINT_LEN];
-        for i in 0..WAYPOINT_LEN {
+        let mut nodes: [Vec2<f32>; WAYPOINTS_LEN] = [Vec2::default(); WAYPOINTS_LEN];
+        for i in 0..WAYPOINTS_LEN {
             nodes[i] = quads[FIRST_WAYPOINT_IDX + i].translate.0;
         }
         nodes
     };
 
     let edges = {
-        let mut edges: [(usize, usize); WAYPOINT_LEN] = [(0, 0); WAYPOINT_LEN];
-        for (i, edge) in edges.iter_mut().enumerate().take(WAYPOINT_LEN) {
-            *edge = (i, (i + 1) % WAYPOINT_LEN);
+        let mut edges: [(usize, usize); WAYPOINTS_LEN] = [(0, 0); WAYPOINTS_LEN];
+        for (i, edge) in edges.iter_mut().enumerate().take(WAYPOINTS_LEN) {
+            *edge = (i, (i + 1) % WAYPOINTS_LEN);
         }
         edges
     };
 
-    let mut weights = [[0.0; WAYPOINT_LEN]; WAYPOINT_LEN];
+    let mut weights = [[0.0; WAYPOINTS_LEN]; WAYPOINTS_LEN];
     pathfinding::init(&nodes, &edges, &mut weights);
-    let mut heap: BinaryHeap<pathfinding::Node<f32>> = BinaryHeap::with_capacity(WAYPOINT_LEN);
-    let mut path: [usize; WAYPOINT_LEN] = [0; WAYPOINT_LEN];
+    let mut heap: BinaryHeap<pathfinding::Node<f32>> = BinaryHeap::with_capacity(WAYPOINTS_LEN);
+    let mut path: [usize; WAYPOINTS_LEN] = [0; WAYPOINTS_LEN];
 
-    let mut lines: [Geom<f32>; LINES_LEN] = [
-        Geom {
-            translate: Vec2::default().into(),
-            scale: Vec2::default().into(),
-            color: PLAYER_LINE_COLOR.into(),
-        },
-        Geom {
-            translate: Vec2::default().into(),
-            scale: Vec2::default().into(),
-            color: CURSOR_LINE_COLOR.into(),
-        },
-        Geom {
-            translate: Vec2 { x: 100.0, y: 0.0 }.into(),
-            scale: Vec2 { x: 310.0, y: 0.0 }.into(),
-            color: PATH_COLOR.into(),
-        },
-        Geom {
-            translate: Vec2 { x: -50.0, y: -125.0 }.into(),
-            scale: Vec2 { x: 0.0, y: 260.0 }.into(),
-            color: PATH_COLOR.into(),
-        },
-        Geom {
-            translate: Vec2 { x: 250.0, y: 125.0 }.into(),
-            scale: Vec2 { x: 0.0, y: 260.0 }.into(),
-            color: PATH_COLOR.into(),
-        },
-        Geom {
-            translate: Vec2 { x: 200.0, y: 250.0 }.into(),
-            scale: Vec2 { x: 110.0, y: 0.0 }.into(),
-            color: PATH_COLOR.into(),
-        },
-        Geom {
-            translate: Vec2 { x: 150.0, y: 175.0 }.into(),
-            scale: Vec2 { x: 0.0, y: 160.0 }.into(),
-            color: PATH_COLOR.into(),
-        },
-        Geom {
-            translate: Vec2 { x: 0.0, y: 100.0 }.into(),
-            scale: Vec2 { x: 310.0, y: 0.0 }.into(),
-            color: PATH_COLOR.into(),
-        },
-        Geom {
-            translate: Vec2 { x: -150.0, y: -25.0 }.into(),
-            scale: Vec2 { x: 0.0, y: 260.0 }.into(),
-            color: PATH_COLOR.into(),
-        },
-        Geom {
-            translate: Vec2 { x: -200.0, y: -150.0 }.into(),
-            scale: Vec2 { x: 110.0, y: 0.0 }.into(),
-            color: PATH_COLOR.into(),
-        },
-        Geom {
-            translate: Vec2 { x: -150.0, y: -250.0 }.into(),
-            scale: Vec2 { x: 210.0, y: 0.0 }.into(),
-            color: PATH_COLOR.into(),
-        },
-        Geom {
-            translate: Vec2 { x: -250.0, y: -200.0 }.into(),
-            scale: Vec2 { x: 0.0, y: 110.0 }.into(),
-            color: PATH_COLOR.into(),
-        },
+    let mut lines: [Geom<f32>; LINES_LEN] = [Geom::default(); LINES_LEN];
+
+    lines[0] = Geom {
+        translate: Vec2::default().into(),
+        scale: Vec2::default().into(),
+        color: PLAYER_LINE_COLOR.into(),
+    };
+    lines[1] = Geom {
+        translate: Vec2::default().into(),
+        scale: Vec2::default().into(),
+        color: CURSOR_LINE_COLOR.into(),
+    };
+
+    let paths: [_; PATHS_LEN] = [
+        (100.0, 0.0, 310.0, 0.0),
+        (-50.0, -125.0, 0.0, 260.0),
+        (250.0, 125.0, 0.0, 260.0),
+        (200.0, 250.0, 110.0, 0.0),
+        (150.0, 175.0, 0.0, 160.0),
+        (0.0, 100.0, 310.0, 0.0),
+        (-150.0, -25.0, 0.0, 260.0),
+        (-200.0, -150.0, 110.0, 0.0),
+        (-150.0, -250.0, 210.0, 0.0),
+        (-250.0, -200.0, 0.0, 110.0),
     ];
+
+    for (i, (x, y, w, h)) in paths.into_iter().enumerate() {
+        lines[FIRST_PATH_IDX + i] = Geom {
+            translate: Vec2 { x, y }.into(),
+            scale: Vec2 { x: w, y: h }.into(),
+            color: PATH_COLOR.into(),
+        };
+    }
 
     unsafe {
         println!("{}", CStr::from_ptr(ffi::glfwGetVersionString()).to_str().unwrap());
@@ -857,7 +832,7 @@ fn main() {
         world_cursor.y = screen_cursor.y.mul_add(VIEW_DISTANCE, camera.y);
 
         let cursor_waypoint_idx = geom::nearest(
-            &quads[FIRST_WAYPOINT_IDX..(FIRST_WAYPOINT_IDX + WAYPOINT_LEN)],
+            &quads[FIRST_WAYPOINT_IDX..(FIRST_WAYPOINT_IDX + WAYPOINTS_LEN)],
             world_cursor,
         ) + FIRST_WAYPOINT_IDX;
 
