@@ -6,12 +6,11 @@ mod pathfinding;
 mod prelude;
 
 use crate::defer::Defer;
-use crate::geom::{Geom, Line};
-use crate::math::{Dot, Mat4, Normalize, Vec2, Vec3, Vec4};
-use std::collections::BinaryHeap;
+use crate::geom::{Geom, Line, Scale, Translate};
+use crate::math::{Distance, Dot, Mat4, Normalize, Vec2, Vec3, Vec4};
 use std::convert::TryInto;
 use std::ffi::{c_char, c_int, c_void, CStr, CString};
-use std::fs::read_to_string;
+use std::fs;
 use std::mem;
 use std::path::Path;
 use std::ptr;
@@ -41,25 +40,11 @@ const LINE_WIDTH: f32 = 4.0;
 const PLAYER_ACCEL: f32 = 2.125;
 const PLAYER_DRAG: f32 = 0.725;
 
-const FLOOR_SCALE: Vec2<f32> = Vec2 { x: 600.0, y: 600.0 };
+const FLOOR_SCALE: Vec2<f32> = Vec2 { x: 500.0, y: 500.0 };
 
 const PLAYER_QUAD_SCALE: f32 = 25.0;
 const PLAYER_LINE_SCALE: f32 = 6.75;
-const WAYPOINT_SCALE: f32 = 15.0;
-
-const QUADS_LEN: usize = 46;
-const PLAYER_QUAD_IDX: usize = 0;
-const FLOOR_IDX: usize = 1;
-const FIRST_WALL_IDX: usize = 2;
-const WALLS_LEN: usize = FIRST_WAYPOINT_IDX - FIRST_WALL_IDX;
-const FIRST_WAYPOINT_IDX: usize = 6;
-const WAYPOINTS_LEN: usize = QUADS_LEN - FIRST_WAYPOINT_IDX;
-
-const LINES_LEN: usize = 12;
-const PLAYER_LINE_IDX: usize = 0;
-const CURSOR_LINE_IDX: usize = 1;
-const FIRST_PATH_IDX: usize = 2;
-const PATHS_LEN: usize = LINES_LEN - FIRST_PATH_IDX;
+const WAYPOINT_SCALE: f32 = 5.0;
 
 const BACKGROUND_COLOR: Vec4<f32> = Vec4 { x: 0.1, y: 0.09, z: 0.11, w: 1.0 };
 const FLOOR_COLOR: Vec4<f32> = Vec4 {
@@ -69,7 +54,6 @@ const FLOOR_COLOR: Vec4<f32> = Vec4 {
     w: 0.25,
 };
 const WALL_COLOR: Vec4<f32> = Vec4 { x: 1.0, y: 1.0, z: 1.0, w: 0.9 };
-const PATH_COLOR: Vec4<f32> = Vec4 { x: 0.6, y: 0.85, z: 0.9, w: 0.0375 };
 const PLAYER_QUAD_COLOR: Vec4<f32> = Vec4 { x: 1.0, y: 0.5, z: 0.75, w: 1.0 };
 const PLAYER_LINE_COLOR: Vec4<f32> = Vec4 { w: 0.375, ..PLAYER_QUAD_COLOR };
 const CURSOR_LINE_COLOR: Vec4<f32> = Vec4 { w: 0.15, ..PLAYER_QUAD_COLOR };
@@ -130,34 +114,6 @@ fn compile_shader(r#type: ffi::GLenum, source: &str) -> ffi::GLuint {
         ffi::glCompileShader(shader);
         shader
     }
-}
-
-fn create_program() -> ffi::GLuint {
-    let program = unsafe { ffi::glCreateProgram() };
-
-    let vert_shader = compile_shader(
-        ffi::GL_VERTEX_SHADER,
-        &read_to_string(Path::new("src").join("vert.glsl")).unwrap(),
-    );
-    defer!(unsafe {
-        ffi::glDeleteShader(vert_shader);
-    });
-
-    let frag_shader = compile_shader(
-        ffi::GL_FRAGMENT_SHADER,
-        &read_to_string(Path::new("src").join("frag.glsl")).unwrap(),
-    );
-    defer!(unsafe {
-        ffi::glDeleteShader(frag_shader);
-    });
-
-    unsafe {
-        ffi::glAttachShader(program, vert_shader);
-        ffi::glAttachShader(program, frag_shader);
-        ffi::glLinkProgram(program);
-    }
-
-    program
 }
 
 fn buffer<T>(target: ffi::GLuint, data: &[T], usage: ffi::GLenum) {
@@ -287,105 +243,7 @@ fn pressed(window: *mut ffi::GLFWwindow, key: c_int) -> bool {
     unsafe { ffi::glfwGetKey(window, key) == ffi::GLFW_PRESS }
 }
 
-fn update_camera(
-    window: *mut ffi::GLFWwindow,
-    camera: &mut Vec3<f32>,
-    camera_speed: &mut Vec2<f32>,
-) {
-    let mut step: Vec2<f32> = Vec2::default();
-
-    if pressed(window, ffi::GLFW_KEY_W) {
-        step.y += 1.0;
-    }
-    if pressed(window, ffi::GLFW_KEY_S) {
-        step.y -= 1.0;
-    }
-    if pressed(window, ffi::GLFW_KEY_A) {
-        step.x -= 1.0;
-    }
-    if pressed(window, ffi::GLFW_KEY_D) {
-        step.x += 1.0;
-    }
-
-    *camera_speed += step.normalize() * CAMERA_ACCEL.into();
-    *camera_speed *= CAMERA_DRAG.into();
-
-    camera.x += camera_speed.x;
-    camera.y += camera_speed.y;
-}
-
-fn unproject_cursor(window: *mut ffi::GLFWwindow, inverse_projection: &Mat4<f32>) -> Vec4<f32> {
-    let mut screen_cursor: Vec2<f64> = Vec2::default();
-    unsafe {
-        ffi::glfwGetCursorPos(window, &mut screen_cursor.x, &mut screen_cursor.y);
-    }
-
-    screen_cursor.x /= f64::from(WINDOW_WIDTH);
-    screen_cursor.y /= f64::from(WINDOW_HEIGHT);
-    screen_cursor -= 0.5.into();
-    screen_cursor *= 2.0.into();
-    screen_cursor.y = -screen_cursor.y;
-
-    #[allow(clippy::cast_possible_truncation)]
-    let screen_cursor = Vec4 {
-        x: screen_cursor.x as f32,
-        y: screen_cursor.y as f32,
-        z: 0.0,
-        w: 1.0,
-    };
-
-    screen_cursor.dot(inverse_projection)
-}
-
-fn update_player<const N: usize>(
-    quads: &mut [Geom<f32>],
-    weights: &[[f32; N]; N],
-    heap: &mut BinaryHeap<pathfinding::Node<f32>>,
-    path: &mut [usize; N],
-    player_speed: &mut Vec2<f32>,
-    player_waypoint_idx: &mut usize,
-    cursor_waypoint_idx: usize,
-) {
-    let path_len = pathfinding::dijkstra(
-        weights,
-        heap,
-        *player_waypoint_idx - FIRST_WAYPOINT_IDX,
-        cursor_waypoint_idx - FIRST_WAYPOINT_IDX,
-        path,
-    );
-
-    let mut gap = geom::distance(quads, *player_waypoint_idx, PLAYER_QUAD_IDX);
-    if (1 < path_len) && (gap <= (PLAYER_QUAD_SCALE / 2.0)) {
-        *player_waypoint_idx = FIRST_WAYPOINT_IDX + path[1];
-        gap = geom::distance(quads, *player_waypoint_idx, PLAYER_QUAD_IDX);
-    }
-
-    if (PLAYER_QUAD_SCALE / 2.0) < gap {
-        let step = quads[*player_waypoint_idx].translate.0 - quads[PLAYER_QUAD_IDX].translate.0;
-        *player_speed += step.normalize() * PLAYER_ACCEL.into();
-    }
-    *player_speed *= PLAYER_DRAG.into();
-    quads[PLAYER_QUAD_IDX].translate.0 += *player_speed;
-}
-
-fn update_lines(
-    quads: &[Geom<f32>],
-    lines: &mut [Geom<f32>],
-    player_speed: Vec2<f32>,
-    world_cursor: Vec2<f32>,
-) {
-    let player_line = Line(
-        quads[PLAYER_QUAD_IDX].translate.0,
-        quads[PLAYER_QUAD_IDX].translate.0 + (player_speed * PLAYER_LINE_SCALE.into()),
-    );
-    lines[PLAYER_LINE_IDX].translate = player_line.into();
-    lines[PLAYER_LINE_IDX].scale = player_line.into();
-
-    let cursor_line = Line(quads[PLAYER_QUAD_IDX].translate.0, world_cursor);
-    lines[CURSOR_LINE_IDX].translate = cursor_line.into();
-    lines[CURSOR_LINE_IDX].scale = cursor_line.into();
-}
-
+#[allow(clippy::cognitive_complexity)]
 fn main() {
     #[allow(clippy::cast_precision_loss)]
     let projection = math::perspective(
@@ -401,146 +259,196 @@ fn main() {
     let mut player_speed: Vec2<f32> = Vec2::default();
     let mut camera_speed: Vec2<f32> = Vec2::default();
 
-    let mut player_waypoint_idx = FIRST_WAYPOINT_IDX;
-
     let mut world_cursor = Vec2::default();
 
-    let mut quads: [Geom<f32>; QUADS_LEN] = [Geom::default(); QUADS_LEN];
-    quads[PLAYER_QUAD_IDX] = Geom {
-        translate: Vec2::default().into(),
-        scale: PLAYER_QUAD_SCALE.into(),
-        color: PLAYER_QUAD_COLOR.into(),
-    };
-    quads[FLOOR_IDX] = Geom {
-        translate: Vec2::default().into(),
-        scale: FLOOR_SCALE.into(),
-        color: FLOOR_COLOR.into(),
-    };
-
-    let walls: [_; WALLS_LEN] = [
-        (50.0, 50.0, 310.0, 10.0),
-        (-100.0, -75.0, 10.0, 260.0),
-        (200.0, 125.0, 10.0, 160.0),
-        (-150.0, -200.0, 110.0, 10.0),
+    let mut quads = vec![
+        Geom {
+            translate: Vec2::default().into(),
+            scale: PLAYER_QUAD_SCALE.into(),
+            color: PLAYER_QUAD_COLOR.into(),
+        },
+        Geom {
+            translate: Vec2::default().into(),
+            scale: FLOOR_SCALE.into(),
+            color: FLOOR_COLOR.into(),
+        },
     ];
+    let player_quad_idx = 0;
 
-    for (i, (x, y, w, h)) in walls.into_iter().enumerate() {
-        quads[FIRST_WALL_IDX + i] = Geom {
-            translate: Vec2 { x, y }.into(),
-            scale: Vec2 { x: w, y: h }.into(),
+    let mut lines = vec![
+        Geom {
+            translate: Vec2::default().into(),
+            scale: Vec2::default().into(),
+            color: PLAYER_LINE_COLOR.into(),
+        },
+        Geom {
+            translate: Vec2::default().into(),
+            scale: Vec2::default().into(),
+            color: CURSOR_LINE_COLOR.into(),
+        },
+    ];
+    let player_line_idx = 0;
+    let cursor_line_idx = 1;
+
+    let (floor_plan, horizontals, verticals, waypoints) = {
+        let floor_plan = fs::read(Path::new("assets").join("floor-plan.txt")).unwrap();
+
+        let mut horizontals = vec![];
+        let mut verticals = vec![];
+        let mut waypoints = vec![];
+
+        let mut x: u8 = 0;
+        let mut y: u8 = 0;
+        let mut w = 0;
+        let mut h = 0;
+        for byte in &floor_plan {
+            match byte {
+                b'\n' => {
+                    x = 0;
+                    y += 1;
+                }
+                _ => x += 1,
+            }
+            w = w.max(x);
+            h = h.max(y);
+        }
+
+        x = 0;
+        y = 0;
+        for byte in floor_plan {
+            match byte {
+                b'\n' => {
+                    assert!(x == w);
+                    x = 0;
+                    y += 1;
+                }
+                b'+' => {
+                    horizontals.push(Vec2 { x, y });
+                    verticals.push(Vec2 { x, y });
+                    x += 1;
+                }
+                b'-' => {
+                    horizontals.push(Vec2 { x, y });
+                    x += 1;
+                }
+                b'|' => {
+                    verticals.push(Vec2 { x, y });
+                    x += 1;
+                }
+                b'.' => {
+                    waypoints.push(Vec2 { x: x.into(), y: y.into() });
+                    x += 1;
+                }
+                _ => panic!(),
+            }
+        }
+        assert!(y == h);
+
+        verticals.sort_unstable();
+        (Vec2 { x: f32::from(w), y: -(f32::from(h)) }, horizontals, verticals, waypoints)
+    };
+
+    let walls = {
+        let mut walls = vec![];
+        walls.push((Line(horizontals[0], horizontals[0]), true));
+
+        for horizontal in horizontals.into_iter().skip(1) {
+            let n = walls.len() - 1;
+            if (walls[n].0 .0.y != horizontal.y) || (walls[n].0 .1.x != (horizontal.x - 1)) {
+                walls.push((Line(horizontal, horizontal), true));
+                continue;
+            }
+            walls[n].0 .1.x = horizontal.x;
+        }
+
+        walls.push((Line(verticals[0], verticals[0]), false));
+
+        for vertical in verticals.into_iter().skip(1) {
+            let n = walls.len() - 1;
+            if (walls[n].0 .0.x != vertical.x) || (walls[n].0 .1.y != (vertical.y - 1)) {
+                walls.push((Line(vertical, vertical), false));
+                continue;
+            }
+            walls[n].0 .1.y = vertical.y;
+        }
+
+        walls
+    };
+
+    let k = FLOOR_SCALE / floor_plan;
+
+    for (wall, horizontal) in walls {
+        let wall = Line(
+            Vec2 {
+                x: f32::from(wall.0.x),
+                y: f32::from(wall.0.y),
+            },
+            Vec2 {
+                x: f32::from(wall.1.x),
+                y: f32::from(wall.1.y),
+            },
+        );
+
+        let mut translate: Translate<f32> = wall.into();
+        translate -= (Vec2 { x: floor_plan.x, y: -floor_plan.y } * 0.5.into()).into();
+        translate *= k.into();
+        translate += (k * 0.5.into()).into();
+
+        let mut scale: Scale<f32> = wall.into();
+        scale.0.x = scale.0.x.abs();
+        scale.0.y = scale.0.y.abs();
+        scale += (Vec2::<f32>::from(1.0)).into();
+
+        if horizontal {
+            scale.0.x *= k.x;
+        } else {
+            scale.0.y *= k.y;
+        }
+
+        quads.push(Geom {
+            translate,
+            scale,
             color: WALL_COLOR.into(),
-        };
+        });
     }
 
-    let waypoints: [_; WAYPOINTS_LEN] = [
-        (0.0, 0.0),
-        (50.0, 0.0),
-        (100.0, 0.0),
-        (150.0, 0.0),
-        (200.0, 0.0),
-        (250.0, 0.0),
-        (250.0, 50.0),
-        (250.0, 100.0),
-        (250.0, 150.0),
-        (250.0, 200.0),
-        (250.0, 250.0),
-        (200.0, 250.0),
-        (150.0, 250.0),
-        (150.0, 200.0),
-        (150.0, 150.0),
-        (150.0, 100.0),
-        (100.0, 100.0),
-        (50.0, 100.0),
-        (0.0, 100.0),
-        (-50.0, 100.0),
-        (-100.0, 100.0),
-        (-150.0, 100.0),
-        (-150.0, 50.0),
-        (-150.0, 0.0),
-        (-150.0, -50.0),
-        (-150.0, -100.0),
-        (-150.0, -150.0),
-        (-200.0, -150.0),
-        (-250.0, -150.0),
-        (-250.0, -200.0),
-        (-250.0, -250.0),
-        (-200.0, -250.0),
-        (-150.0, -250.0),
-        (-100.0, -250.0),
-        (-50.0, -250.0),
-        (-50.0, -200.0),
-        (-50.0, -150.0),
-        (-50.0, -100.0),
-        (-50.0, -50.0),
-        (-50.0, 0.0),
-    ];
+    let first_waypoint_idx = quads.len();
+    let mut player_waypoint_idx = first_waypoint_idx;
 
-    for (i, (x, y)) in waypoints.into_iter().enumerate() {
-        quads[FIRST_WAYPOINT_IDX + i] = Geom {
-            translate: Vec2 { x, y }.into(),
+    for waypoint in &waypoints {
+        let mut translate = (*waypoint).into();
+        translate -= (Vec2 { x: floor_plan.x, y: -floor_plan.y } * 0.5.into()).into();
+        translate *= k.into();
+        translate += (k * 0.5.into()).into();
+
+        quads.push(Geom {
+            translate,
             scale: WAYPOINT_SCALE.into(),
             color: WAYPOINT_COLOR.into(),
-        };
+        });
     }
 
     let nodes = {
-        let mut nodes: [Vec2<f32>; WAYPOINTS_LEN] = [Vec2::default(); WAYPOINTS_LEN];
-        for i in 0..WAYPOINTS_LEN {
-            nodes[i] = quads[FIRST_WAYPOINT_IDX + i].translate.0;
+        let mut nodes = Vec::with_capacity(waypoints.len());
+        for quad in quads.iter().skip(first_waypoint_idx) {
+            nodes.push(quad.translate.0);
         }
         nodes
     };
 
     let edges = {
-        let mut edges: [(usize, usize); WAYPOINTS_LEN] = [(0, 0); WAYPOINTS_LEN];
-        for (i, edge) in edges.iter_mut().enumerate().take(WAYPOINTS_LEN) {
-            *edge = (i, (i + 1) % WAYPOINTS_LEN);
+        let mut edges = Vec::with_capacity(waypoints.len());
+        for i in 0..nodes.len() {
+            edges.push((i, (i + 1) % nodes.len()));
         }
         edges
     };
 
-    let mut weights = [[0.0; WAYPOINTS_LEN]; WAYPOINTS_LEN];
-    pathfinding::init(&nodes, &edges, &mut weights);
-    let mut heap: BinaryHeap<pathfinding::Node<f32>> = BinaryHeap::with_capacity(WAYPOINTS_LEN);
-    let mut path: [usize; WAYPOINTS_LEN] = [0; WAYPOINTS_LEN];
+    let dijkstra = pathfinding::Dijkstra::new(&nodes, &edges);
 
-    let mut lines: [Geom<f32>; LINES_LEN] = [Geom::default(); LINES_LEN];
-
-    lines[0] = Geom {
-        translate: Vec2::default().into(),
-        scale: Vec2::default().into(),
-        color: PLAYER_LINE_COLOR.into(),
-    };
-    lines[1] = Geom {
-        translate: Vec2::default().into(),
-        scale: Vec2::default().into(),
-        color: CURSOR_LINE_COLOR.into(),
-    };
-
-    let paths: [_; PATHS_LEN] = [
-        (100.0, 0.0, 310.0, 0.0),
-        (-50.0, -125.0, 0.0, 260.0),
-        (250.0, 125.0, 0.0, 260.0),
-        (200.0, 250.0, 110.0, 0.0),
-        (150.0, 175.0, 0.0, 160.0),
-        (0.0, 100.0, 310.0, 0.0),
-        (-150.0, -25.0, 0.0, 260.0),
-        (-200.0, -150.0, 110.0, 0.0),
-        (-150.0, -250.0, 210.0, 0.0),
-        (-250.0, -200.0, 0.0, 110.0),
-    ];
-
-    for (i, (x, y, w, h)) in paths.into_iter().enumerate() {
-        lines[FIRST_PATH_IDX + i] = Geom {
-            translate: Vec2 { x, y }.into(),
-            scale: Vec2 { x: w, y: h }.into(),
-            color: PATH_COLOR.into(),
-        };
-    }
+    println!("{}", unsafe { CStr::from_ptr(ffi::glfwGetVersionString()) }.to_str().unwrap());
 
     unsafe {
-        println!("{}", CStr::from_ptr(ffi::glfwGetVersionString()).to_str().unwrap());
-
         ffi::glfwSetErrorCallback(callback_glfw_error);
         assert!(ffi::glfwInit() == 1);
     }
@@ -620,16 +528,42 @@ fn main() {
         ffi::glDeleteBuffers(vbo.len().try_into().unwrap(), vbo.as_ptr());
     });
 
-    let instance_vbo = unsafe {
+    let instance_vbo = {
         let mut instance_vbo: [ffi::GLuint; 2] = [0; 2];
-        ffi::glGenBuffers(instance_vbo.len().try_into().unwrap(), instance_vbo.as_mut_ptr());
+        unsafe {
+            ffi::glGenBuffers(instance_vbo.len().try_into().unwrap(), instance_vbo.as_mut_ptr());
+        }
         instance_vbo
     };
     defer!(unsafe {
         ffi::glDeleteBuffers(instance_vbo.len().try_into().unwrap(), instance_vbo.as_ptr());
     });
 
-    let program = create_program();
+    let program = unsafe { ffi::glCreateProgram() };
+    {
+        let vert_shader = compile_shader(
+            ffi::GL_VERTEX_SHADER,
+            &fs::read_to_string(Path::new("src").join("vert.glsl")).unwrap(),
+        );
+        defer!(unsafe {
+            ffi::glDeleteShader(vert_shader);
+        });
+
+        let frag_shader = compile_shader(
+            ffi::GL_FRAGMENT_SHADER,
+            &fs::read_to_string(Path::new("src").join("frag.glsl")).unwrap(),
+        );
+        defer!(unsafe {
+            ffi::glDeleteShader(frag_shader);
+        });
+
+        unsafe {
+            ffi::glAttachShader(program, vert_shader);
+            ffi::glAttachShader(program, frag_shader);
+            ffi::glLinkProgram(program);
+        }
+    }
+
     defer!(unsafe {
         ffi::glDeleteProgram(program);
     });
@@ -673,27 +607,111 @@ fn main() {
             ffi::glfwPollEvents();
         }
 
-        update_camera(window, &mut camera, &mut camera_speed);
+        {
+            let mut step: Vec2<f32> = Vec2::default();
 
-        let screen_cursor = unproject_cursor(window, &inverse_projection);
+            if pressed(window, ffi::GLFW_KEY_W) {
+                step.y += 1.0;
+            }
+            if pressed(window, ffi::GLFW_KEY_S) {
+                step.y -= 1.0;
+            }
+            if pressed(window, ffi::GLFW_KEY_A) {
+                step.x -= 1.0;
+            }
+            if pressed(window, ffi::GLFW_KEY_D) {
+                step.x += 1.0;
+            }
+
+            camera_speed += step.normalize() * CAMERA_ACCEL.into();
+            camera_speed *= CAMERA_DRAG.into();
+
+            camera.x += camera_speed.x;
+            camera.y += camera_speed.y;
+        }
+
+        let screen_cursor = {
+            let mut screen_cursor: Vec2<f64> = Vec2::default();
+            unsafe {
+                ffi::glfwGetCursorPos(window, &mut screen_cursor.x, &mut screen_cursor.y);
+            }
+
+            screen_cursor.x /= f64::from(WINDOW_WIDTH);
+            screen_cursor.y /= f64::from(WINDOW_HEIGHT);
+            screen_cursor -= 0.5.into();
+            screen_cursor *= 2.0.into();
+            screen_cursor.y = -screen_cursor.y;
+
+            #[allow(clippy::cast_possible_truncation)]
+            let screen_cursor = Vec4 {
+                x: screen_cursor.x as f32,
+                y: screen_cursor.y as f32,
+                z: 0.0,
+                w: 1.0,
+            };
+
+            screen_cursor.dot(&inverse_projection)
+        };
+
         world_cursor.x = screen_cursor.x.mul_add(VIEW_DISTANCE, camera.x);
         world_cursor.y = screen_cursor.y.mul_add(VIEW_DISTANCE, camera.y);
 
-        let cursor_waypoint_idx = geom::nearest(
-            &quads[FIRST_WAYPOINT_IDX..(FIRST_WAYPOINT_IDX + WAYPOINTS_LEN)],
-            world_cursor,
-        ) + FIRST_WAYPOINT_IDX;
+        let cursor_waypoint_idx = {
+            let mut min_gap = f32::INFINITY;
+            let mut cursor_waypoint_idx = quads.len();
 
-        update_player(
-            &mut quads,
-            &weights,
-            &mut heap,
-            &mut path,
-            &mut player_speed,
-            &mut player_waypoint_idx,
-            cursor_waypoint_idx,
-        );
-        update_lines(&quads, &mut lines, player_speed, world_cursor);
+            for (i, neighbor) in quads[first_waypoint_idx..].iter().enumerate() {
+                let gap = world_cursor.distance(neighbor.translate.0);
+                if gap < min_gap {
+                    min_gap = gap;
+                    cursor_waypoint_idx = i;
+                }
+            }
+
+            cursor_waypoint_idx + first_waypoint_idx
+        };
+
+        {
+            let path = dijkstra.shortest_path(
+                player_waypoint_idx - first_waypoint_idx,
+                cursor_waypoint_idx - first_waypoint_idx,
+            );
+
+            let gap = {
+                let mut gap = (quads[player_waypoint_idx].translate.0)
+                    .distance(quads[player_quad_idx].translate.0);
+
+                if (1 < path.len()) && (gap <= (PLAYER_QUAD_SCALE / 2.0)) {
+                    player_waypoint_idx = first_waypoint_idx + path[1];
+                    gap = (quads[player_waypoint_idx].translate.0)
+                        .distance(quads[player_quad_idx].translate.0);
+                }
+
+                gap
+            };
+
+            if (PLAYER_QUAD_SCALE / 2.0) < gap {
+                let step =
+                    quads[player_waypoint_idx].translate.0 - quads[player_quad_idx].translate.0;
+                player_speed += step.normalize() * PLAYER_ACCEL.into();
+            }
+            player_speed *= PLAYER_DRAG.into();
+
+            quads[player_quad_idx].translate.0 += player_speed;
+        }
+
+        {
+            let player_line = Line(
+                quads[player_quad_idx].translate.0,
+                quads[player_quad_idx].translate.0 + (player_speed * PLAYER_LINE_SCALE.into()),
+            );
+            lines[player_line_idx].translate = player_line.into();
+            lines[player_line_idx].scale = player_line.into();
+
+            let cursor_line = Line(quads[player_quad_idx].translate.0, world_cursor);
+            lines[cursor_line_idx].translate = cursor_line.into();
+            lines[cursor_line_idx].scale = cursor_line.into();
+        }
 
         quads[cursor_waypoint_idx].color.0 = WAYPOINT_HIGHLIGHT_COLOR;
 

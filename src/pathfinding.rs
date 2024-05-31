@@ -3,7 +3,7 @@ use std::cmp;
 use std::collections::BinaryHeap;
 
 #[derive(Copy, Clone, PartialEq)]
-pub struct Node<T> {
+struct Node<T> {
     index: usize,
     cost: T,
 }
@@ -24,77 +24,63 @@ impl Ord for Node<f32> {
     }
 }
 
-pub fn init<const N: usize, T: Distance<f32> + Copy>(
-    nodes: &[T],
-    edges: &[(usize, usize)],
-    weights: &mut [[f32; N]; N],
-) {
-    for (i, row) in weights.iter_mut().enumerate().take(N) {
-        for (j, cell) in row.iter_mut().enumerate().take(N) {
-            if i == j {
-                *cell = 0.0;
-            } else {
-                *cell = f32::INFINITY;
-            }
-        }
-    }
-
-    for (i, j) in edges {
-        let weight = nodes[*i].distance(nodes[*j]);
-        weights[*i][*j] = weight;
-        weights[*j][*i] = weight;
-    }
+pub struct Dijkstra<'a, T> {
+    nodes: &'a [T],
+    weights: Vec<f32>,
 }
 
-// NOTE: See `https://doc.rust-lang.org/std/collections/binary_heap/index.html`.
-pub fn dijkstra<const N: usize>(
-    weights: &[[f32; N]; N],
-    heap: &mut BinaryHeap<Node<f32>>,
-    start: usize,
-    end: usize,
-    path: &mut [usize; N],
-) -> usize {
-    let mut costs: [f32; N] = [f32::INFINITY; N];
-    let mut previous: [usize; N] = [N; N];
+impl<'a, T: Distance<f32> + Copy> Dijkstra<'a, T> {
+    pub fn new(nodes: &'a [T], edges: &'a [(usize, usize)]) -> Self {
+        let mut weights = vec![f32::INFINITY; nodes.len() * nodes.len()];
 
-    heap.clear();
-    costs[start] = 0.0;
+        for (i, j) in edges {
+            let weight = nodes[*i].distance(nodes[*j]);
+            weights[(i * nodes.len()) + j] = weight;
+            weights[(j * nodes.len()) + i] = weight;
+        }
 
-    heap.push(Node { index: start, cost: 0.0 });
-    while let Some(node) = heap.pop() {
-        if node.index == end {
-            break;
-        }
-        if costs[node.index] < node.cost {
-            continue;
-        }
-        for i in 0..N {
-            if node.index == i {
-                continue;
-            }
-            if weights[node.index][i].is_infinite() {
-                continue;
-            }
-            let cost = node.cost + weights[node.index][i];
-            if cost < costs[i] {
-                heap.push(Node { index: i, cost });
-                previous[i] = node.index;
-                costs[i] = cost;
-            }
-        }
+        Self { nodes, weights }
     }
 
-    let mut i = end;
-    let mut j = 0;
-    while i != start {
-        path[j] = i;
-        j += 1;
-        i = previous[i];
+    // NOTE: See `https://doc.rust-lang.org/std/collections/binary_heap/index.html`.
+    pub fn shortest_path(&self, start: usize, end: usize) -> Vec<usize> {
+        let mut costs = vec![f32::INFINITY; self.nodes.len()];
+        let mut previous = vec![self.nodes.len(); self.nodes.len()];
+        let mut heap = BinaryHeap::with_capacity(self.nodes.len());
+
+        costs[start] = 0.0;
+        heap.push(Node { index: start, cost: 0.0 });
+
+        while let Some(node) = heap.pop() {
+            if node.index == end {
+                break;
+            }
+            if costs[node.index] < node.cost {
+                continue;
+            }
+            for j in 0..self.nodes.len() {
+                if self.weights[(node.index * self.nodes.len()) + j].is_infinite() {
+                    continue;
+                }
+                let cost = node.cost + self.weights[(node.index * self.nodes.len()) + j];
+                if cost < costs[j] {
+                    heap.push(Node { index: j, cost });
+                    previous[j] = node.index;
+                    costs[j] = cost;
+                }
+            }
+        }
+
+        let mut path = Vec::with_capacity(self.nodes.len());
+        {
+            let mut i = end;
+            while i != start {
+                path.push(i);
+                i = previous[i];
+            }
+        }
+        path.push(start);
+        path.reverse();
+        path
     }
-    path[j] = start;
-    j += 1;
-
-    path[..j].reverse();
-
-    j
 }

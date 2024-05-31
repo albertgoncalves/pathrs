@@ -1,7 +1,8 @@
-use crate::math::{Distance, Rotate, Vec2, Vec4};
+use crate::math::{Rotate, Vec2, Vec4};
+use std::ops;
 
 #[repr(C)]
-#[derive(Clone, Copy, Default)]
+#[derive(Clone, Copy)]
 pub struct Translate<T>(pub Vec2<T>);
 
 impl<T> From<Vec2<T>> for Translate<T> {
@@ -10,8 +11,29 @@ impl<T> From<Vec2<T>> for Translate<T> {
     }
 }
 
+impl<T: ops::AddAssign> ops::AddAssign for Translate<T> {
+    fn add_assign(&mut self, other: Self) {
+        self.0.x += other.0.x;
+        self.0.y += other.0.y;
+    }
+}
+
+impl<T: ops::SubAssign> ops::SubAssign for Translate<T> {
+    fn sub_assign(&mut self, other: Self) {
+        self.0.x -= other.0.x;
+        self.0.y -= other.0.y;
+    }
+}
+
+impl<T: ops::MulAssign> ops::MulAssign for Translate<T> {
+    fn mul_assign(&mut self, other: Self) {
+        self.0.x *= other.0.x;
+        self.0.y *= other.0.y;
+    }
+}
+
 #[repr(C)]
-#[derive(Clone, Copy, Default)]
+#[derive(Clone, Copy)]
 pub struct Scale<T>(pub Vec2<T>);
 
 impl<T> From<Vec2<T>> for Scale<T> {
@@ -26,8 +48,22 @@ impl<T: Copy> From<T> for Scale<T> {
     }
 }
 
+impl<T: ops::AddAssign> ops::AddAssign for Scale<T> {
+    fn add_assign(&mut self, other: Self) {
+        self.0.x += other.0.x;
+        self.0.y += other.0.y;
+    }
+}
+
+impl<T: ops::MulAssign> ops::MulAssign for Scale<T> {
+    fn mul_assign(&mut self, other: Self) {
+        self.0.x *= other.0.x;
+        self.0.y *= other.0.y;
+    }
+}
+
 #[repr(C)]
-#[derive(Clone, Copy, Default)]
+#[derive(Clone, Copy)]
 pub struct Color<T>(pub Vec4<T>);
 
 impl<T> From<Vec4<T>> for Color<T> {
@@ -37,7 +73,7 @@ impl<T> From<Vec4<T>> for Color<T> {
 }
 
 #[repr(C)]
-#[derive(Clone, Copy, Default)]
+#[derive(Clone, Copy)]
 pub struct Geom<T> {
     pub translate: Translate<T>,
     pub scale: Scale<T>,
@@ -66,26 +102,4 @@ impl Line<f32> {
         line.1.rotate(point, radians);
         line
     }
-}
-
-pub fn distance<T: Copy>(geoms: &[Geom<T>], i: usize, j: usize) -> T
-where
-    Vec2<T>: Distance<T>,
-{
-    geoms[i].translate.0.distance(geoms[j].translate.0)
-}
-
-pub fn nearest(geoms: &[Geom<f32>], point: Vec2<f32>) -> usize {
-    let mut min_gap = f32::INFINITY;
-    let mut index = geoms.len();
-
-    for (i, neighbor) in geoms.iter().enumerate() {
-        let gap = point.distance(neighbor.translate.0);
-        if gap < min_gap {
-            min_gap = gap;
-            index = i;
-        }
-    }
-
-    index
 }

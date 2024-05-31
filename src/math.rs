@@ -1,7 +1,7 @@
 use std::ops;
 
 #[repr(C)]
-#[derive(Clone, Copy, Default)]
+#[derive(Clone, Copy, Default, Eq, Ord, PartialEq, PartialOrd)]
 pub struct Vec2<T> {
     pub x: T,
     pub y: T,
@@ -73,6 +73,17 @@ impl<T: ops::MulAssign> ops::MulAssign for Vec2<T> {
     }
 }
 
+impl<T: ops::Div<Output = T>> ops::Div for Vec2<T> {
+    type Output = Self;
+
+    fn div(self, other: Self) -> Self {
+        Self {
+            x: self.x / other.x,
+            y: self.y / other.y,
+        }
+    }
+}
+
 impl<T: ops::DivAssign> ops::DivAssign for Vec2<T> {
     fn div_assign(&mut self, other: Self) {
         self.x /= other.x;
@@ -81,7 +92,7 @@ impl<T: ops::DivAssign> ops::DivAssign for Vec2<T> {
 }
 
 #[repr(C)]
-#[derive(Clone, Copy, Default)]
+#[derive(Clone, Copy)]
 pub struct Vec3<T> {
     pub x: T,
     pub y: T,
@@ -119,7 +130,7 @@ impl<T: ops::Sub<Output = T>> ops::Sub for Vec3<T> {
 }
 
 #[repr(C)]
-#[derive(Clone, Copy, Default)]
+#[derive(Clone, Copy)]
 pub struct Vec4<T> {
     pub x: T,
     pub y: T,

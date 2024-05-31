@@ -9,3 +9,6 @@
 !src/
 !*.rs
 !*.glsl
+
+!assets/
+!*.txt
