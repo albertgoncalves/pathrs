@@ -1,5 +1,4 @@
 use crate::math::{Rotate, Vec2, Vec4};
-use std::ops;
 
 #[repr(C)]
 #[derive(Clone, Copy)]
@@ -11,27 +10,6 @@ impl<T> From<Vec2<T>> for Translate<T> {
     }
 }
 
-impl<T: ops::AddAssign> ops::AddAssign for Translate<T> {
-    fn add_assign(&mut self, other: Self) {
-        self.0.x += other.0.x;
-        self.0.y += other.0.y;
-    }
-}
-
-impl<T: ops::SubAssign> ops::SubAssign for Translate<T> {
-    fn sub_assign(&mut self, other: Self) {
-        self.0.x -= other.0.x;
-        self.0.y -= other.0.y;
-    }
-}
-
-impl<T: ops::MulAssign> ops::MulAssign for Translate<T> {
-    fn mul_assign(&mut self, other: Self) {
-        self.0.x *= other.0.x;
-        self.0.y *= other.0.y;
-    }
-}
-
 #[repr(C)]
 #[derive(Clone, Copy)]
 pub struct Scale<T>(pub Vec2<T>);
@@ -39,26 +17,6 @@ pub struct Scale<T>(pub Vec2<T>);
 impl<T> From<Vec2<T>> for Scale<T> {
     fn from(vec: Vec2<T>) -> Self {
         Self(vec)
-    }
-}
-
-impl<T: Copy> From<T> for Scale<T> {
-    fn from(value: T) -> Self {
-        Self(value.into())
-    }
-}
-
-impl<T: ops::AddAssign> ops::AddAssign for Scale<T> {
-    fn add_assign(&mut self, other: Self) {
-        self.0.x += other.0.x;
-        self.0.y += other.0.y;
-    }
-}
-
-impl<T: ops::MulAssign> ops::MulAssign for Scale<T> {
-    fn mul_assign(&mut self, other: Self) {
-        self.0.x *= other.0.x;
-        self.0.y *= other.0.y;
     }
 }
 

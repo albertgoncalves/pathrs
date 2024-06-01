@@ -1,16 +1,10 @@
 use std::ops;
 
 #[repr(C)]
-#[derive(Clone, Copy, Default, Eq, Ord, PartialEq, PartialOrd)]
+#[derive(Clone, Copy, Default, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct Vec2<T> {
     pub x: T,
     pub y: T,
-}
-
-impl From<Vec2<i32>> for Vec2<f64> {
-    fn from(vec: Vec2<i32>) -> Self {
-        Self { x: vec.x.into(), y: vec.y.into() }
-    }
 }
 
 impl<T: Copy> From<T> for Vec2<T> {
@@ -73,24 +67,6 @@ impl<T: ops::MulAssign> ops::MulAssign for Vec2<T> {
     }
 }
 
-impl<T: ops::Div<Output = T>> ops::Div for Vec2<T> {
-    type Output = Self;
-
-    fn div(self, other: Self) -> Self {
-        Self {
-            x: self.x / other.x,
-            y: self.y / other.y,
-        }
-    }
-}
-
-impl<T: ops::DivAssign> ops::DivAssign for Vec2<T> {
-    fn div_assign(&mut self, other: Self) {
-        self.x /= other.x;
-        self.y /= other.y;
-    }
-}
-
 #[repr(C)]
 #[derive(Clone, Copy)]
 pub struct Vec3<T> {
@@ -105,18 +81,6 @@ impl<T: Copy> From<T> for Vec3<T> {
     }
 }
 
-impl<T: ops::Mul<Output = T>> ops::Mul for Vec3<T> {
-    type Output = Self;
-
-    fn mul(self, other: Self) -> Self {
-        Self {
-            x: self.x * other.x,
-            y: self.y * other.y,
-            z: self.z * other.z,
-        }
-    }
-}
-
 impl<T: ops::Sub<Output = T>> ops::Sub for Vec3<T> {
     type Output = Self;
 
@@ -125,6 +89,18 @@ impl<T: ops::Sub<Output = T>> ops::Sub for Vec3<T> {
             x: self.x - other.x,
             y: self.y - other.y,
             z: self.z - other.z,
+        }
+    }
+}
+
+impl<T: ops::Mul<Output = T>> ops::Mul for Vec3<T> {
+    type Output = Self;
+
+    fn mul(self, other: Self) -> Self {
+        Self {
+            x: self.x * other.x,
+            y: self.y * other.y,
+            z: self.z * other.z,
         }
     }
 }

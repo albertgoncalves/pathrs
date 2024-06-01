@@ -8,6 +8,7 @@ mod prelude;
 use crate::defer::Defer;
 use crate::geom::{Geom, Line, Scale, Translate};
 use crate::math::{Distance, Dot, Mat4, Normalize, Vec2, Vec3, Vec4};
+use std::collections::HashMap;
 use std::convert::TryInto;
 use std::ffi::{c_char, c_int, c_void, CStr, CString};
 use std::fs;
@@ -264,7 +265,7 @@ fn main() {
     let mut quads = vec![
         Geom {
             translate: Vec2::default().into(),
-            scale: PLAYER_QUAD_SCALE.into(),
+            scale: Vec2::<f32>::from(PLAYER_QUAD_SCALE).into(),
             color: PLAYER_QUAD_COLOR.into(),
         },
         Geom {
@@ -290,7 +291,7 @@ fn main() {
     let player_line_idx = 0;
     let cursor_line_idx = 1;
 
-    let (floor_plan, horizontals, verticals, waypoints) = {
+    let (bounds, horizontals, verticals, waypoints) = {
         let floor_plan = fs::read(Path::new("assets").join("floor-plan.txt")).unwrap();
 
         let mut horizontals = vec![];
@@ -299,8 +300,8 @@ fn main() {
 
         let mut x: u8 = 0;
         let mut y: u8 = 0;
-        let mut w = 0;
-        let mut h = 0;
+        let mut w: u8 = 0;
+        let mut h: u8 = 0;
         for byte in &floor_plan {
             match byte {
                 b'\n' => {
@@ -336,7 +337,7 @@ fn main() {
                     x += 1;
                 }
                 b'.' => {
-                    waypoints.push(Vec2 { x: x.into(), y: y.into() });
+                    waypoints.push(Vec2 { x, y });
                     x += 1;
                 }
                 _ => panic!(),
@@ -345,13 +346,13 @@ fn main() {
         assert!(y == h);
 
         verticals.sort_unstable();
-        (Vec2 { x: f32::from(w), y: -(f32::from(h)) }, horizontals, verticals, waypoints)
+        (Vec2 { x: w, y: h }, horizontals, verticals, waypoints)
     };
 
     let walls = {
         let mut walls = vec![];
-        walls.push((Line(horizontals[0], horizontals[0]), true));
 
+        walls.push((Line(horizontals[0], horizontals[0]), true));
         for horizontal in horizontals.into_iter().skip(1) {
             let n = walls.len() - 1;
             if (walls[n].0 .0.y != horizontal.y) || (walls[n].0 .1.x != (horizontal.x - 1)) {
@@ -362,7 +363,6 @@ fn main() {
         }
 
         walls.push((Line(verticals[0], verticals[0]), false));
-
         for vertical in verticals.into_iter().skip(1) {
             let n = walls.len() - 1;
             if (walls[n].0 .0.x != vertical.x) || (walls[n].0 .1.y != (vertical.y - 1)) {
@@ -375,7 +375,15 @@ fn main() {
         walls
     };
 
-    let k = FLOOR_SCALE / floor_plan;
+    let k = Vec2 {
+        x: FLOOR_SCALE.x / f32::from(bounds.x),
+        y: FLOOR_SCALE.y / -f32::from(bounds.y),
+    };
+    let half_k = k * 0.5.into();
+    let half_bounds = Vec2 {
+        x: f32::from(bounds.x) * 0.5,
+        y: f32::from(bounds.y) * 0.5,
+    };
 
     for (wall, horizontal) in walls {
         let wall = Line(
@@ -390,14 +398,14 @@ fn main() {
         );
 
         let mut translate: Translate<f32> = wall.into();
-        translate -= (Vec2 { x: floor_plan.x, y: -floor_plan.y } * 0.5.into()).into();
-        translate *= k.into();
-        translate += (k * 0.5.into()).into();
+        translate.0 -= half_bounds;
+        translate.0 *= k;
+        translate.0 += half_k;
 
         let mut scale: Scale<f32> = wall.into();
         scale.0.x = scale.0.x.abs();
         scale.0.y = scale.0.y.abs();
-        scale += (Vec2::<f32>::from(1.0)).into();
+        scale.0 += 1.0.into();
 
         if horizontal {
             scale.0.x *= k.x;
@@ -416,17 +424,22 @@ fn main() {
     let mut player_waypoint_idx = first_waypoint_idx;
 
     for waypoint in &waypoints {
-        let mut translate = (*waypoint).into();
-        translate -= (Vec2 { x: floor_plan.x, y: -floor_plan.y } * 0.5.into()).into();
-        translate *= k.into();
-        translate += (k * 0.5.into()).into();
+        let mut translate: Translate<f32> = Vec2 {
+            x: f32::from(waypoint.x),
+            y: f32::from(waypoint.y),
+        }
+        .into();
+        translate.0 -= half_bounds;
+        translate.0 *= k;
+        translate.0 += half_k;
 
         quads.push(Geom {
             translate,
-            scale: WAYPOINT_SCALE.into(),
+            scale: Vec2::<f32>::from(WAYPOINT_SCALE).into(),
             color: WAYPOINT_COLOR.into(),
         });
     }
+    quads[player_quad_idx].translate = quads[first_waypoint_idx].translate;
 
     let nodes = {
         let mut nodes = Vec::with_capacity(waypoints.len());
@@ -436,10 +449,32 @@ fn main() {
         nodes
     };
 
+    let map = {
+        let mut map = HashMap::with_capacity(waypoints.len());
+        for (i, waypoint) in waypoints.iter().enumerate() {
+            map.insert(waypoint, i);
+        }
+        map
+    };
+
     let edges = {
         let mut edges = Vec::with_capacity(waypoints.len());
-        for i in 0..nodes.len() {
-            edges.push((i, (i + 1) % nodes.len()));
+        for (i, waypoint) in waypoints.iter().enumerate() {
+            let min_x = waypoint.x.saturating_sub(1);
+            let min_y = waypoint.y.saturating_sub(1);
+            let max_x = (waypoint.x + 1).min(bounds.x - 1);
+            let max_y = (waypoint.y + 1).min(bounds.y - 1);
+            for y in min_y..=max_y {
+                for x in min_x..=max_x {
+                    if (x == waypoint.x) && (y == waypoint.x) {
+                        continue;
+                    }
+                    let Some(j) = map.get(&Vec2 { x, y }) else {
+                        continue;
+                    };
+                    edges.push((i, *j));
+                }
+            }
         }
         edges
     };
