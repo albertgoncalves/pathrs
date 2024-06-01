@@ -44,7 +44,8 @@ const PLAYER_DRAG: f32 = 0.85;
 const PLAYER_QUAD_SCALE: f32 = 20.0;
 const PLAYER_LINE_SCALE: f32 = 6.75;
 const FLOOR_SCALE: f32 = 50.0;
-const WAYPOINT_SCALE: f32 = 7.5;
+const WAYPOINT_SCALE: f32 = 6.75;
+const WAYPOINT_HIGHLIGHT_SCALE: f32 = 8.75;
 
 const BACKGROUND_COLOR: Vec4<f32> = Vec4 { x: 0.1, y: 0.09, z: 0.11, w: 1.0 };
 const FLOOR_COLOR: Vec4<f32> = Vec4 {
@@ -745,6 +746,7 @@ fn main() {
 
         for i in &path {
             quads[first_waypoint_idx + i].color.0 = WAYPOINT_HIGHLIGHT_COLOR;
+            quads[first_waypoint_idx + i].scale.0 = WAYPOINT_HIGHLIGHT_SCALE.into();
         }
 
         let view = math::look_at(camera, Vec3 { z: 0.0, ..camera }, VIEW_UP);
@@ -763,6 +765,7 @@ fn main() {
 
         for i in path {
             quads[first_waypoint_idx + i].color.0 = WAYPOINT_COLOR;
+            quads[first_waypoint_idx + i].scale.0 = WAYPOINT_SCALE.into();
         }
 
         frames += 1;
