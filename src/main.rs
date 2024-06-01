@@ -38,13 +38,13 @@ const VIEW_UP: Vec3<f32> = Vec3 { x: 0.0, y: 1.0, z: 0.0 };
 
 const LINE_WIDTH: f32 = 4.0;
 
-const PLAYER_ACCEL: f32 = 2.125;
-const PLAYER_DRAG: f32 = 0.725;
+const PLAYER_ACCEL: f32 = 0.6925;
+const PLAYER_DRAG: f32 = 0.85;
 
-const PLAYER_QUAD_SCALE: f32 = 25.0;
+const PLAYER_QUAD_SCALE: f32 = 20.0;
 const PLAYER_LINE_SCALE: f32 = 6.75;
 const FLOOR_SCALE: f32 = 50.0;
-const WAYPOINT_SCALE: f32 = 5.0;
+const WAYPOINT_SCALE: f32 = 7.5;
 
 const BACKGROUND_COLOR: Vec4<f32> = Vec4 { x: 0.1, y: 0.09, z: 0.11, w: 1.0 };
 const FLOOR_COLOR: Vec4<f32> = Vec4 {
@@ -58,7 +58,7 @@ const PLAYER_QUAD_COLOR: Vec4<f32> = Vec4 { x: 1.0, y: 0.5, z: 0.75, w: 1.0 };
 const PLAYER_LINE_COLOR: Vec4<f32> = Vec4 { w: 0.375, ..PLAYER_QUAD_COLOR };
 const CURSOR_LINE_COLOR: Vec4<f32> = Vec4 { w: 0.15, ..PLAYER_QUAD_COLOR };
 const WAYPOINT_COLOR: Vec4<f32> = Vec4 { x: 0.4, y: 0.875, z: 0.9, w: 0.2 };
-const WAYPOINT_HIGHLIGHT_COLOR: Vec4<f32> = Vec4 { x: 1.0, ..WAYPOINT_COLOR };
+const WAYPOINT_HIGHLIGHT_COLOR: Vec4<f32> = Vec4 { y: 1.0, w: 0.695, ..WAYPOINT_COLOR };
 
 extern "C" fn callback_glfw_error(error_code: c_int, description: *const c_char) {
     let mut message = error_code.to_string();
@@ -609,22 +609,25 @@ fn main() {
 
     let mut now = time::Instant::now();
     let mut frames = 0;
+    let mut dijkstra_counter = 0;
 
-    println!("\n\n\n\n");
+    println!("\n\n\n\n\n");
     while unsafe { ffi::glfwWindowShouldClose(window) } != 1 {
         let elapsed = now.elapsed();
         if 0 < elapsed.as_secs() {
             println!(
-                "\x1B[5A\
+                "\x1B[6A\
                  {:12.2} elapsed ns\n\
                  {frames:12} frames\n\
                  {:12} ns / frame\n\
                  {:12.2} world_cursor.x\n\
-                 {:12.2} world_cursor.y",
+                 {:12.2} world_cursor.y\n\
+                 {:12} dijkstra counter",
                 elapsed.as_nanos(),
                 elapsed.as_nanos() / frames,
                 world_cursor.x,
                 world_cursor.y,
+                dijkstra_counter,
             );
             now = time::Instant::now();
             frames = 0;
@@ -695,15 +698,15 @@ fn main() {
                 }
             }
 
-            cursor_waypoint_idx + first_waypoint_idx
+            first_waypoint_idx + cursor_waypoint_idx
         };
 
+        let path = dijkstra.shortest_path(
+            player_waypoint_idx - first_waypoint_idx,
+            cursor_waypoint_idx - first_waypoint_idx,
+            &mut dijkstra_counter,
+        );
         {
-            let path = dijkstra.shortest_path(
-                player_waypoint_idx - first_waypoint_idx,
-                cursor_waypoint_idx - first_waypoint_idx,
-            );
-
             let gap = {
                 let mut gap = (quads[player_waypoint_idx].translate.0)
                     .distance(quads[player_quad_idx].translate.0);
@@ -740,7 +743,9 @@ fn main() {
             lines[cursor_line_idx].scale = cursor_line.into();
         }
 
-        quads[cursor_waypoint_idx].color.0 = WAYPOINT_HIGHLIGHT_COLOR;
+        for i in &path {
+            quads[first_waypoint_idx + i].color.0 = WAYPOINT_HIGHLIGHT_COLOR;
+        }
 
         let view = math::look_at(camera, Vec3 { z: 0.0, ..camera }, VIEW_UP);
 
@@ -756,7 +761,9 @@ fn main() {
             ffi::glfwSwapBuffers(window);
         }
 
-        quads[cursor_waypoint_idx].color.0 = WAYPOINT_COLOR;
+        for i in path {
+            quads[first_waypoint_idx + i].color.0 = WAYPOINT_COLOR;
+        }
 
         frames += 1;
     }

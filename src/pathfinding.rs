@@ -43,7 +43,7 @@ impl<'a, T: Distance<f32> + Copy> Dijkstra<'a, T> {
     }
 
     // NOTE: See `https://doc.rust-lang.org/std/collections/binary_heap/index.html`.
-    pub fn shortest_path(&self, start: usize, end: usize) -> Vec<usize> {
+    pub fn shortest_path(&self, start: usize, end: usize, counter: &mut usize) -> Vec<usize> {
         let mut costs = vec![f32::INFINITY; self.nodes.len()];
         let mut previous = vec![self.nodes.len(); self.nodes.len()];
         let mut heap = BinaryHeap::with_capacity(self.nodes.len());
@@ -51,7 +51,9 @@ impl<'a, T: Distance<f32> + Copy> Dijkstra<'a, T> {
         costs[start] = 0.0;
         heap.push(Node { index: start, cost: 0.0 });
 
+        *counter = 0;
         while let Some(node) = heap.pop() {
+            *counter += 1;
             if node.index == end {
                 break;
             }
