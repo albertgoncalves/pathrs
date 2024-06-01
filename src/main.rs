@@ -423,39 +423,32 @@ fn main() {
     let first_waypoint_idx = quads.len();
     let mut player_waypoint_idx = first_waypoint_idx;
 
-    for waypoint in &waypoints {
-        let mut translate: Translate<f32> = Vec2 {
-            x: f32::from(waypoint.x),
-            y: f32::from(waypoint.y),
-        }
-        .into();
-        translate.0 -= half_bounds;
-        translate.0 *= k;
-        translate.0 += half_k;
-
-        quads.push(Geom {
-            translate,
-            scale: Vec2::<f32>::from(WAYPOINT_SCALE).into(),
-            color: WAYPOINT_COLOR.into(),
-        });
-    }
-    quads[player_quad_idx].translate = quads[first_waypoint_idx].translate;
-
-    let nodes = {
+    let (nodes, map) = {
         let mut nodes = Vec::with_capacity(waypoints.len());
-        for quad in quads.iter().skip(first_waypoint_idx) {
-            nodes.push(quad.translate.0);
-        }
-        nodes
-    };
-
-    let map = {
         let mut map = HashMap::with_capacity(waypoints.len());
+
         for (i, waypoint) in waypoints.iter().enumerate() {
+            let mut translate: Translate<f32> = Vec2 {
+                x: f32::from(waypoint.x),
+                y: f32::from(waypoint.y),
+            }
+            .into();
+            translate.0 -= half_bounds;
+            translate.0 *= k;
+            translate.0 += half_k;
+
+            quads.push(Geom {
+                translate,
+                scale: Vec2::<f32>::from(WAYPOINT_SCALE).into(),
+                color: WAYPOINT_COLOR.into(),
+            });
+            nodes.push(translate.0);
             map.insert(waypoint, i);
         }
-        map
+        (nodes, map)
     };
+
+    quads[player_quad_idx].translate = quads[first_waypoint_idx].translate;
 
     let edges = {
         let mut edges = Vec::with_capacity(waypoints.len());
