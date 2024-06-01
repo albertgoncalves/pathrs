@@ -37,8 +37,7 @@ CLIPPY = \
 	-W clippy::pedantic \
 	-W clippy::perf \
 	-W clippy::suspicious \
-	-A clippy::similar-names \
-	-A clippy::too-many-lines
+	-A clippy::similar-names
 LIBS = \
 	-lGL \
 	-lglfw
