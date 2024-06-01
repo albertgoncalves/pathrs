@@ -33,7 +33,7 @@ const WINDOW_HEIGHT: i32 = 900;
 const CAMERA_ACCEL: f32 = 1.1125;
 const CAMERA_DRAG: f32 = 0.8925;
 
-const VIEW_DISTANCE: f32 = 600.0;
+const VIEW_DISTANCE: f32 = 750.0;
 const VIEW_UP: Vec3<f32> = Vec3 { x: 0.0, y: 1.0, z: 0.0 };
 
 const LINE_WIDTH: f32 = 4.0;
@@ -41,10 +41,9 @@ const LINE_WIDTH: f32 = 4.0;
 const PLAYER_ACCEL: f32 = 2.125;
 const PLAYER_DRAG: f32 = 0.725;
 
-const FLOOR_SCALE: Vec2<f32> = Vec2 { x: 500.0, y: 500.0 };
-
 const PLAYER_QUAD_SCALE: f32 = 25.0;
 const PLAYER_LINE_SCALE: f32 = 6.75;
+const FLOOR_SCALE: f32 = 50.0;
 const WAYPOINT_SCALE: f32 = 5.0;
 
 const BACKGROUND_COLOR: Vec4<f32> = Vec4 { x: 0.1, y: 0.09, z: 0.11, w: 1.0 };
@@ -262,18 +261,11 @@ fn main() {
 
     let mut world_cursor = Vec2::default();
 
-    let mut quads = vec![
-        Geom {
-            translate: Vec2::default().into(),
-            scale: Vec2::<f32>::from(PLAYER_QUAD_SCALE).into(),
-            color: PLAYER_QUAD_COLOR.into(),
-        },
-        Geom {
-            translate: Vec2::default().into(),
-            scale: FLOOR_SCALE.into(),
-            color: FLOOR_COLOR.into(),
-        },
-    ];
+    let mut quads = vec![Geom {
+        translate: Vec2::default().into(),
+        scale: Vec2::<f32>::from(PLAYER_QUAD_SCALE).into(),
+        color: PLAYER_QUAD_COLOR.into(),
+    }];
     let player_quad_idx = 0;
 
     let mut lines = vec![
@@ -375,15 +367,22 @@ fn main() {
         walls
     };
 
-    let k = Vec2 {
-        x: FLOOR_SCALE.x / f32::from(bounds.x),
-        y: FLOOR_SCALE.y / -f32::from(bounds.y),
-    };
+    let k = Vec2 { x: FLOOR_SCALE, y: -FLOOR_SCALE };
     let half_k = k * 0.5.into();
     let half_bounds = Vec2 {
         x: f32::from(bounds.x) * 0.5,
         y: f32::from(bounds.y) * 0.5,
     };
+
+    quads.push(Geom {
+        translate: Vec2::default().into(),
+        scale: Vec2 {
+            x: f32::from(bounds.x) * FLOOR_SCALE,
+            y: f32::from(bounds.y) * FLOOR_SCALE,
+        }
+        .into(),
+        color: FLOOR_COLOR.into(),
+    });
 
     for (wall, horizontal) in walls {
         let wall = Line(
