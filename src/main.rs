@@ -459,12 +459,13 @@ fn main() {
             let max_y = (waypoint.y + 1).min(bounds.y - 1);
             for y in min_y..=max_y {
                 for x in min_x..=max_x {
-                    if (x == waypoint.x) && (y == waypoint.x) {
+                    if (x == waypoint.x) && (y == waypoint.y) {
                         continue;
                     }
                     let Some(j) = map.get(&Vec2 { x, y }) else {
                         continue;
                     };
+                    assert!(i != *j);
                     edges.push((i, *j));
                 }
             }
