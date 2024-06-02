@@ -1,6 +1,6 @@
 use crate::math::Distance;
 use std::cmp;
-use std::collections::BinaryHeap;
+use std::collections::{BinaryHeap, VecDeque};
 
 #[derive(Copy, Clone, PartialEq)]
 struct Node<T> {
@@ -34,7 +34,7 @@ pub fn shortest_path<T: Distance<f32> + Copy>(
     start: usize,
     end: usize,
     counter: &mut usize,
-) -> Vec<usize> {
+) -> VecDeque<usize> {
     let mut costs = vec![f32::INFINITY; nodes.len()];
     costs[start] = 0.0;
 
@@ -74,15 +74,14 @@ pub fn shortest_path<T: Distance<f32> + Copy>(
         }
     }
 
-    let mut path = Vec::with_capacity(nodes.len());
+    let mut path = VecDeque::with_capacity(nodes.len());
     {
         let mut i = end;
         while i != start {
-            path.push(i);
+            path.push_front(i);
             i = previous[i];
         }
     }
-    path.push(start);
-    path.reverse();
+    path.push_front(start);
     path
 }
