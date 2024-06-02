@@ -473,7 +473,14 @@ fn main() {
         edges
     };
 
-    let dijkstra = pathfinding::Dijkstra::new(&nodes, &edges);
+    let weights = {
+        let mut weights = vec![f32::INFINITY; nodes.len() * nodes.len()];
+        for (i, j) in edges {
+            assert!(weights[(i * nodes.len()) + j].is_infinite());
+            weights[(i * nodes.len()) + j] = nodes[i].distance(nodes[j]);
+        }
+        weights
+    };
 
     println!("{}", unsafe { CStr::from_ptr(ffi::glfwGetVersionString()) }.to_str().unwrap());
 
@@ -611,7 +618,7 @@ fn main() {
 
     let mut now = time::Instant::now();
     let mut frames = 0;
-    let mut dijkstra_counter = 0;
+    let mut path_counter = 0;
 
     println!("\n\n\n\n\n");
     while unsafe { ffi::glfwWindowShouldClose(window) } != 1 {
@@ -624,12 +631,12 @@ fn main() {
                  {:12} ns / frame\n\
                  {:12.2} world_cursor.x\n\
                  {:12.2} world_cursor.y\n\
-                 {:12} dijkstra counter",
+                 {:12} path_counter",
                 elapsed.as_nanos(),
                 elapsed.as_nanos() / frames,
                 world_cursor.x,
                 world_cursor.y,
-                dijkstra_counter,
+                path_counter,
             );
             now = time::Instant::now();
             frames = 0;
@@ -703,10 +710,12 @@ fn main() {
             first_waypoint_idx + cursor_waypoint_idx
         };
 
-        let path = dijkstra.shortest_path(
+        let path = pathfinding::shortest_path(
+            &nodes,
+            &weights,
             player_waypoint_idx - first_waypoint_idx,
             cursor_waypoint_idx - first_waypoint_idx,
-            &mut dijkstra_counter,
+            &mut path_counter,
         );
         {
             let gap = {
