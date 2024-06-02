@@ -33,19 +33,19 @@ const WINDOW_HEIGHT: i32 = 900;
 const CAMERA_ACCEL: f32 = 1.1125;
 const CAMERA_DRAG: f32 = 0.8925;
 
-const VIEW_DISTANCE: f32 = 750.0;
+const VIEW_DISTANCE: f32 = 500.0;
 const VIEW_UP: Vec3<f32> = Vec3 { x: 0.0, y: 1.0, z: 0.0 };
 
 const LINE_WIDTH: f32 = 4.0;
 
-const PLAYER_ACCEL: f32 = 0.6925;
-const PLAYER_DRAG: f32 = 0.85;
+const PLAYER_ACCEL: f32 = 0.6975;
+const PLAYER_DRAG: f32 = 0.825;
 
-const PLAYER_QUAD_SCALE: f32 = 20.0;
+const PLAYER_QUAD_SCALE: f32 = 16.5;
 const PLAYER_LINE_SCALE: f32 = 6.75;
-const FLOOR_SCALE: f32 = 50.0;
-const WAYPOINT_SCALE: f32 = 6.75;
-const WAYPOINT_HIGHLIGHT_SCALE: f32 = 8.75;
+const FLOOR_SCALE: f32 = 35.0;
+const WAYPOINT_SCALE: f32 = 5.0;
+const WAYPOINT_HIGHLIGHT_SCALE: f32 = 6.25;
 
 const BACKGROUND_COLOR: Vec4<f32> = Vec4 { x: 0.1, y: 0.09, z: 0.11, w: 1.0 };
 const FLOOR_COLOR: Vec4<f32> = Vec4 {
@@ -58,8 +58,8 @@ const WALL_COLOR: Vec4<f32> = Vec4 { x: 1.0, y: 1.0, z: 1.0, w: 0.9 };
 const PLAYER_QUAD_COLOR: Vec4<f32> = Vec4 { x: 1.0, y: 0.5, z: 0.75, w: 1.0 };
 const PLAYER_LINE_COLOR: Vec4<f32> = Vec4 { w: 0.375, ..PLAYER_QUAD_COLOR };
 const CURSOR_LINE_COLOR: Vec4<f32> = Vec4 { w: 0.15, ..PLAYER_QUAD_COLOR };
-const WAYPOINT_COLOR: Vec4<f32> = Vec4 { x: 0.4, y: 0.875, z: 0.9, w: 0.2 };
-const WAYPOINT_HIGHLIGHT_COLOR: Vec4<f32> = Vec4 { y: 1.0, w: 0.695, ..WAYPOINT_COLOR };
+const WAYPOINT_COLOR: Vec4<f32> = Vec4 { x: 0.4, y: 0.875, z: 0.9, w: 0.15 };
+const WAYPOINT_HIGHLIGHT_COLOR: Vec4<f32> = Vec4 { y: 1.0, w: 0.675, ..WAYPOINT_COLOR };
 
 extern "C" fn callback_glfw_error(error_code: c_int, description: *const c_char) {
     let mut message = error_code.to_string();
@@ -421,7 +421,6 @@ fn main() {
     }
 
     let first_waypoint_idx = quads.len();
-    let mut player_waypoint_idx = first_waypoint_idx;
 
     let (nodes, map) = {
         let mut nodes = Vec::with_capacity(waypoints.len());
@@ -448,6 +447,7 @@ fn main() {
         (nodes, map)
     };
 
+    let mut player_waypoint_idx = first_waypoint_idx;
     quads[player_quad_idx].translate = quads[first_waypoint_idx].translate;
 
     let edges = {
