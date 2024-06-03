@@ -250,8 +250,8 @@ fn main() {
     let projection = math::perspective(
         45.0,
         (WINDOW_WIDTH as f32) / (WINDOW_HEIGHT as f32),
-        VIEW_DISTANCE - 0.1,
-        VIEW_DISTANCE + 0.1,
+        VIEW_DISTANCE - 100.0,
+        VIEW_DISTANCE + 100.0,
     );
     let inverse_projection: Mat4<f32> = math::inverse_perspective(&projection);
 
@@ -260,7 +260,7 @@ fn main() {
     let mut player_speed: Vec2<f32> = Vec2::default();
     let mut camera_speed: Vec2<f32> = Vec2::default();
 
-    let mut world_cursor = Vec2::default();
+    let mut world_cursor = Vec4::default();
 
     let mut quads = vec![Geom {
         translate: Vec2::default().into(),
@@ -477,7 +477,9 @@ fn main() {
         let mut weights = vec![f32::INFINITY; nodes.len() * nodes.len()];
         for (i, j) in edges {
             assert!(weights[(i * nodes.len()) + j].is_infinite());
-            weights[(i * nodes.len()) + j] = nodes[i].distance(nodes[j]);
+            let weight = nodes[i].distance(nodes[j]);
+            assert!(weight.is_sign_positive());
+            weights[(i * nodes.len()) + j] = weight;
         }
         weights
     };
@@ -620,22 +622,24 @@ fn main() {
     let mut frames = 0;
     let mut path_counter = 0;
 
-    println!("\n\n\n\n\n");
+    println!("\n\n\n\n\n\n");
     while unsafe { ffi::glfwWindowShouldClose(window) } != 1 {
         let elapsed = now.elapsed();
         if 0 < elapsed.as_secs() {
             println!(
-                "\x1B[6A\
+                "\x1B[7A\
                  {:12.2} elapsed ns\n\
                  {frames:12} frames\n\
                  {:12} ns / frame\n\
                  {:12.2} world_cursor.x\n\
                  {:12.2} world_cursor.y\n\
+                 {:12.2} world_cursor.z\n\
                  {:12} path_counter",
                 elapsed.as_nanos(),
                 elapsed.as_nanos() / frames,
                 world_cursor.x,
                 world_cursor.y,
+                world_cursor.z,
                 path_counter,
             );
             now = time::Instant::now();
@@ -669,7 +673,14 @@ fn main() {
             camera.y += camera_speed.y;
         }
 
-        let screen_cursor = {
+        let view_to = Vec3 {
+            x: camera.x,
+            y: camera.y + 100.0,
+            z: 0.0,
+        };
+        let view = math::look_at(camera, view_to, VIEW_UP);
+
+        {
             let mut screen_cursor: Vec2<f64> = Vec2::default();
             unsafe {
                 ffi::glfwGetCursorPos(window, &mut screen_cursor.x, &mut screen_cursor.y);
@@ -677,30 +688,65 @@ fn main() {
 
             screen_cursor.x /= f64::from(WINDOW_WIDTH);
             screen_cursor.y /= f64::from(WINDOW_HEIGHT);
-            screen_cursor -= 0.5.into();
-            screen_cursor *= 2.0.into();
-            screen_cursor.y = -screen_cursor.y;
+            screen_cursor = (screen_cursor * 2.0.into()) - 1.0.into();
 
             #[allow(clippy::cast_possible_truncation)]
-            let screen_cursor = Vec4 {
+            let mut near = Vec4 {
                 x: screen_cursor.x as f32,
-                y: screen_cursor.y as f32,
-                z: 0.0,
+                y: -screen_cursor.y as f32,
+                z: -1.0,
                 w: 1.0,
             };
 
-            screen_cursor.dot(&inverse_projection)
-        };
+            #[allow(clippy::cast_possible_truncation)]
+            let mut far = Vec4 {
+                x: screen_cursor.x as f32,
+                y: -screen_cursor.y as f32,
+                z: 1.0,
+                w: 1.0,
+            };
 
-        world_cursor.x = screen_cursor.x.mul_add(VIEW_DISTANCE, camera.x);
-        world_cursor.y = screen_cursor.y.mul_add(VIEW_DISTANCE, camera.y);
+            near = near.dot(&inverse_projection);
+            near /= near.w.into();
+            far = far.dot(&inverse_projection);
+            far /= far.w.into();
+
+            let inverse_view = math::invert(&view);
+            let direction = (far - near).dot(&inverse_view);
+            let ray = near.dot(&inverse_view);
+
+            let mut ray = Vec3 { x: ray.x, y: ray.y, z: ray.z };
+            let direction = Vec3 {
+                x: direction.x,
+                y: direction.y,
+                z: direction.z,
+            }
+            .normalize();
+            let normal = Vec3 { x: 0.0, y: 0.0, z: 1.0 };
+            let denominator = normal.dot(direction);
+            let origin = Vec3 { x: camera.x, y: camera.y, z: 0.0 };
+            let t = if f32::EPSILON < denominator.abs() {
+                (origin - ray).dot(normal) / denominator
+            } else {
+                panic!()
+            };
+            ray += direction * t.into();
+            world_cursor.x = ray.x;
+            world_cursor.y = ray.y;
+            world_cursor.z = ray.z;
+        };
 
         let cursor_waypoint_idx = {
             let mut min_gap = f32::INFINITY;
             let mut cursor_waypoint_idx = quads.len();
 
             for (i, neighbor) in quads[first_waypoint_idx..].iter().enumerate() {
-                let gap = world_cursor.distance(neighbor.translate.0);
+                let gap = Vec2 {
+                    x: world_cursor.x,
+                    y: world_cursor.y,
+                }
+                .distance(neighbor.translate.0);
+                assert!(gap.is_sign_positive());
                 if gap < min_gap {
                     min_gap = gap;
                     cursor_waypoint_idx = i;
@@ -721,11 +767,13 @@ fn main() {
             let gap = {
                 let mut gap = (quads[player_waypoint_idx].translate.0)
                     .distance(quads[player_quad_idx].translate.0);
+                assert!(gap.is_sign_positive());
 
                 if (1 < path.len()) && (gap <= (PLAYER_QUAD_SCALE / 2.0)) {
                     player_waypoint_idx = first_waypoint_idx + path[1];
                     gap = (quads[player_waypoint_idx].translate.0)
                         .distance(quads[player_quad_idx].translate.0);
+                    assert!(gap.is_sign_positive());
                 }
 
                 gap
@@ -749,7 +797,13 @@ fn main() {
             lines[player_line_idx].translate = player_line.into();
             lines[player_line_idx].scale = player_line.into();
 
-            let cursor_line = Line(quads[player_quad_idx].translate.0, world_cursor);
+            let cursor_line = Line(
+                quads[player_quad_idx].translate.0,
+                Vec2 {
+                    x: world_cursor.x,
+                    y: world_cursor.y,
+                },
+            );
             lines[cursor_line_idx].translate = cursor_line.into();
             lines[cursor_line_idx].scale = cursor_line.into();
         }
@@ -758,8 +812,6 @@ fn main() {
             quads[first_waypoint_idx + i].color.0 = WAYPOINT_HIGHLIGHT_COLOR;
             quads[first_waypoint_idx + i].scale.0 = WAYPOINT_HIGHLIGHT_SCALE.into();
         }
-
-        let view = math::look_at(camera, Vec3 { z: 0.0, ..camera }, VIEW_UP);
 
         unsafe {
             uniform!(program, view);

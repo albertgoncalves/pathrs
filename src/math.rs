@@ -93,6 +93,14 @@ impl<T: ops::Sub<Output = T>> ops::Sub for Vec3<T> {
     }
 }
 
+impl<T: ops::AddAssign> ops::AddAssign for Vec3<T> {
+    fn add_assign(&mut self, other: Self) {
+        self.x += other.x;
+        self.y += other.y;
+        self.z += other.z;
+    }
+}
+
 impl<T: ops::Mul<Output = T>> ops::Mul for Vec3<T> {
     type Output = Self;
 
@@ -106,7 +114,7 @@ impl<T: ops::Mul<Output = T>> ops::Mul for Vec3<T> {
 }
 
 #[repr(C)]
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Default)]
 pub struct Vec4<T> {
     pub x: T,
     pub y: T,
@@ -114,9 +122,147 @@ pub struct Vec4<T> {
     pub w: T,
 }
 
+impl<T: Copy> From<T> for Vec4<T> {
+    fn from(value: T) -> Self {
+        Self {
+            x: value,
+            y: value,
+            z: value,
+            w: value,
+        }
+    }
+}
+
+impl<T: ops::Sub<Output = T>> ops::Sub for Vec4<T> {
+    type Output = Self;
+
+    fn sub(self, other: Self) -> Self {
+        Self {
+            x: self.x - other.x,
+            y: self.y - other.y,
+            z: self.z - other.z,
+            w: self.w - other.w,
+        }
+    }
+}
+
+impl<T: ops::DivAssign> ops::DivAssign for Vec4<T> {
+    fn div_assign(&mut self, other: Self) {
+        self.x /= other.x;
+        self.y /= other.y;
+        self.z /= other.z;
+        self.w /= other.w;
+    }
+}
+
 #[repr(C)]
 #[derive(Clone, Copy, Default)]
 pub struct Mat4<T>(pub [[T; 4]; 4]);
+
+#[allow(clippy::suboptimal_flops)]
+pub fn invert(mat: &Mat4<f32>) -> Mat4<f32> {
+    let mut out = [[0.0; 4]; 4];
+    let mut m = [0.0; 4 * 4];
+    for i in 0..4 {
+        for j in 0..4 {
+            m[(j * 4) + i] = mat.0[i][j];
+        }
+    }
+
+    out[0][0] = m[5] * m[10] * m[15] - m[5] * m[11] * m[14] - m[9] * m[6] * m[15]
+        + m[9] * m[7] * m[14]
+        + m[13] * m[6] * m[11]
+        - m[13] * m[7] * m[10];
+
+    out[1][0] = -m[1] * m[10] * m[15] + m[1] * m[11] * m[14] + m[9] * m[2] * m[15]
+        - m[9] * m[3] * m[14]
+        - m[13] * m[2] * m[11]
+        + m[13] * m[3] * m[10];
+
+    out[2][0] = m[1] * m[6] * m[15] - m[1] * m[7] * m[14] - m[5] * m[2] * m[15]
+        + m[5] * m[3] * m[14]
+        + m[13] * m[2] * m[7]
+        - m[13] * m[3] * m[6];
+
+    out[3][0] = -m[1] * m[6] * m[11] + m[1] * m[7] * m[10] + m[5] * m[2] * m[11]
+        - m[5] * m[3] * m[10]
+        - m[9] * m[2] * m[7]
+        + m[9] * m[3] * m[6];
+
+    out[0][1] = -m[4] * m[10] * m[15] + m[4] * m[11] * m[14] + m[8] * m[6] * m[15]
+        - m[8] * m[7] * m[14]
+        - m[12] * m[6] * m[11]
+        + m[12] * m[7] * m[10];
+
+    out[1][1] = m[0] * m[10] * m[15] - m[0] * m[11] * m[14] - m[8] * m[2] * m[15]
+        + m[8] * m[3] * m[14]
+        + m[12] * m[2] * m[11]
+        - m[12] * m[3] * m[10];
+
+    out[2][1] = -m[0] * m[6] * m[15] + m[0] * m[7] * m[14] + m[4] * m[2] * m[15]
+        - m[4] * m[3] * m[14]
+        - m[12] * m[2] * m[7]
+        + m[12] * m[3] * m[6];
+
+    out[3][1] = m[0] * m[6] * m[11] - m[0] * m[7] * m[10] - m[4] * m[2] * m[11]
+        + m[4] * m[3] * m[10]
+        + m[8] * m[2] * m[7]
+        - m[8] * m[3] * m[6];
+
+    out[0][2] = m[4] * m[9] * m[15] - m[4] * m[11] * m[13] - m[8] * m[5] * m[15]
+        + m[8] * m[7] * m[13]
+        + m[12] * m[5] * m[11]
+        - m[12] * m[7] * m[9];
+
+    out[1][2] = -m[0] * m[9] * m[15] + m[0] * m[11] * m[13] + m[8] * m[1] * m[15]
+        - m[8] * m[3] * m[13]
+        - m[12] * m[1] * m[11]
+        + m[12] * m[3] * m[9];
+
+    out[2][2] = m[0] * m[5] * m[15] - m[0] * m[7] * m[13] - m[4] * m[1] * m[15]
+        + m[4] * m[3] * m[13]
+        + m[12] * m[1] * m[7]
+        - m[12] * m[3] * m[5];
+
+    out[0][3] = -m[4] * m[9] * m[14] + m[4] * m[10] * m[13] + m[8] * m[5] * m[14]
+        - m[8] * m[6] * m[13]
+        - m[12] * m[5] * m[10]
+        + m[12] * m[6] * m[9];
+
+    out[3][2] = -m[0] * m[5] * m[11] + m[0] * m[7] * m[9] + m[4] * m[1] * m[11]
+        - m[4] * m[3] * m[9]
+        - m[8] * m[1] * m[7]
+        + m[8] * m[3] * m[5];
+
+    out[1][3] = m[0] * m[9] * m[14] - m[0] * m[10] * m[13] - m[8] * m[1] * m[14]
+        + m[8] * m[2] * m[13]
+        + m[12] * m[1] * m[10]
+        - m[12] * m[2] * m[9];
+
+    out[2][3] = -m[0] * m[5] * m[14] + m[0] * m[6] * m[13] + m[4] * m[1] * m[14]
+        - m[4] * m[2] * m[13]
+        - m[12] * m[1] * m[6]
+        + m[12] * m[2] * m[5];
+
+    out[3][3] = m[0] * m[5] * m[10] - m[0] * m[6] * m[9] - m[4] * m[1] * m[10]
+        + m[4] * m[2] * m[9]
+        + m[8] * m[1] * m[6]
+        - m[8] * m[2] * m[5];
+
+    let det = m[0] * out[0][0] + m[1] * out[0][1] + m[2] * out[0][2] + m[3] * out[0][3];
+
+    assert!(det != 0.0);
+    let inv_det = 1.0 / det;
+
+    #[allow(clippy::needless_range_loop)]
+    for j in 0..4 {
+        for i in 0..4 {
+            out[i][j] *= inv_det;
+        }
+    }
+
+    Mat4(out)
+}
 
 // NOTE: See `https://www.khronos.org/registry/OpenGL-Refpages/gl2.1/xhtml/gluPerspective.xml`.
 pub fn perspective(fov: f32, aspect_ratio: f32, near: f32, far: f32) -> Mat4<f32> {
@@ -188,6 +334,26 @@ pub fn look_at(from: Vec3<f32>, to: Vec3<f32>, up: Vec3<f32>) -> Mat4<f32> {
     mat
 }
 
+#[test]
+fn test_inverse_look_at() {
+    let view = look_at(
+        Vec3 { x: 0.0, y: 0.0, z: 100.0 },
+        Vec3 { x: 0.0, y: 1.0, z: 0.0 },
+        Vec3 { x: 0.0, y: 1.0, z: 0.0 },
+    );
+    let inverse_view = invert(&view);
+    let identity = view.dot(&inverse_view);
+    for i in 0..4 {
+        for j in 0..4 {
+            if i == j {
+                assert!((identity.0[i][j] - 1.0).abs() < f32::EPSILON);
+            } else {
+                assert!(identity.0[i][j].abs() < f32::EPSILON);
+            }
+        }
+    }
+}
+
 pub trait Rotate<T> {
     fn rotate(&mut self, center: Self, radians: T);
 }
@@ -242,10 +408,10 @@ where
 {
     fn dot(self, other: &Mat4<T>) -> Self {
         Self {
-            x: self.dot(other.0[0]),
-            y: self.dot(other.0[1]),
-            z: self.dot(other.0[2]),
-            w: self.dot(other.0[3]),
+            x: self.dot([other.0[0][0], other.0[1][0], other.0[2][0], other.0[3][0]]),
+            y: self.dot([other.0[0][1], other.0[1][1], other.0[2][1], other.0[3][1]]),
+            z: self.dot([other.0[0][2], other.0[1][2], other.0[2][2], other.0[3][2]]),
+            w: self.dot([other.0[0][3], other.0[1][3], other.0[2][3], other.0[3][3]]),
         }
     }
 }
