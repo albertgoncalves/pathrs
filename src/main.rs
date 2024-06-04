@@ -247,7 +247,7 @@ fn pressed(window: *mut ffi::GLFWwindow, key: c_int) -> bool {
     unsafe { ffi::glfwGetKey(window, key) == ffi::GLFW_PRESS }
 }
 
-#[allow(clippy::cognitive_complexity, clippy::too_many_lines)]
+#[allow(clippy::cognitive_complexity)]
 fn main() {
     #[allow(clippy::cast_precision_loss)]
     let projection = math::perspective(
