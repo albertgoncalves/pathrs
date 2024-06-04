@@ -44,8 +44,8 @@ const PLAYER_DRAG: f32 = 0.825;
 const PLAYER_QUAD_SCALE: f32 = 16.5;
 const PLAYER_LINE_SCALE: f32 = 6.75;
 const FLOOR_SCALE: f32 = 35.0;
-const WAYPOINT_SCALE: f32 = 5.0;
-const WAYPOINT_HIGHLIGHT_SCALE: f32 = 6.25;
+const WAYPOINT_SCALE: f32 = 4.5;
+const WAYPOINT_HIGHLIGHT_SCALE: f32 = 5.75;
 
 const BACKGROUND_COLOR: Vec4<f32> = Vec4 { x: 0.1, y: 0.09, z: 0.11, w: 1.0 };
 const FLOOR_COLOR: Vec4<f32> = Vec4 {
@@ -58,7 +58,7 @@ const WALL_COLOR: Vec4<f32> = Vec4 { x: 1.0, y: 1.0, z: 1.0, w: 0.9 };
 const PLAYER_QUAD_COLOR: Vec4<f32> = Vec4 { x: 1.0, y: 0.5, z: 0.75, w: 1.0 };
 const PLAYER_LINE_COLOR: Vec4<f32> = Vec4 { w: 0.375, ..PLAYER_QUAD_COLOR };
 const CURSOR_LINE_COLOR: Vec4<f32> = Vec4 { w: 0.15, ..PLAYER_QUAD_COLOR };
-const WAYPOINT_COLOR: Vec4<f32> = Vec4 { x: 0.4, y: 0.875, z: 0.9, w: 0.15 };
+const WAYPOINT_COLOR: Vec4<f32> = Vec4 { x: 0.4, y: 0.875, z: 0.9, w: 0.1 };
 const WAYPOINT_HIGHLIGHT_COLOR: Vec4<f32> = Vec4 { y: 1.0, w: 0.675, ..WAYPOINT_COLOR };
 
 extern "C" fn callback_glfw_error(error_code: c_int, description: *const c_char) {
