@@ -33,7 +33,10 @@ const WINDOW_HEIGHT: i32 = 900;
 const CAMERA_ACCEL: f32 = 1.1125;
 const CAMERA_DRAG: f32 = 0.8925;
 
-const VIEW_DISTANCE: f32 = 500.0;
+const CAMERA_OFFSET: f32 = -30.0;
+
+const VIEW_DISTANCE: f32 = 350.0;
+const VIEW_TO_OFFSET: f32 = 25.0;
 const VIEW_UP: Vec3<f32> = Vec3 { x: 0.0, y: 1.0, z: 0.0 };
 
 const LINE_WIDTH: f32 = 4.0;
@@ -255,7 +258,11 @@ fn main() {
     );
     let inverse_projection: Mat4<f32> = math::inverse_perspective(&projection);
 
-    let mut camera = Vec3 { x: 0.0, y: 0.0, z: VIEW_DISTANCE };
+    let mut camera = Vec3 {
+        x: 0.0,
+        y: CAMERA_OFFSET,
+        z: VIEW_DISTANCE,
+    };
 
     let mut player_speed: Vec2<f32> = Vec2::default();
     let mut camera_speed: Vec2<f32> = Vec2::default();
@@ -675,7 +682,7 @@ fn main() {
 
         let view_to = Vec3 {
             x: camera.x,
-            y: camera.y + 100.0,
+            y: camera.y + VIEW_TO_OFFSET,
             z: 0.0,
         };
         let view = math::look_at(camera, view_to, VIEW_UP);
