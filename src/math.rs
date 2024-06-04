@@ -68,7 +68,7 @@ impl<T: ops::MulAssign> ops::MulAssign for Vec2<T> {
 }
 
 #[repr(C)]
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Default)]
 pub struct Vec3<T> {
     pub x: T,
     pub y: T,
@@ -81,6 +81,18 @@ impl<T: Copy> From<T> for Vec3<T> {
     }
 }
 
+impl<T: ops::Add<Output = T>> ops::Add for Vec3<T> {
+    type Output = Self;
+
+    fn add(self, other: Self) -> Self {
+        Self {
+            x: self.x + other.x,
+            y: self.y + other.y,
+            z: self.z + other.z,
+        }
+    }
+}
+
 impl<T: ops::Sub<Output = T>> ops::Sub for Vec3<T> {
     type Output = Self;
 
@@ -90,14 +102,6 @@ impl<T: ops::Sub<Output = T>> ops::Sub for Vec3<T> {
             y: self.y - other.y,
             z: self.z - other.z,
         }
-    }
-}
-
-impl<T: ops::AddAssign> ops::AddAssign for Vec3<T> {
-    fn add_assign(&mut self, other: Self) {
-        self.x += other.x;
-        self.y += other.y;
-        self.z += other.z;
     }
 }
 
@@ -114,7 +118,7 @@ impl<T: ops::Mul<Output = T>> ops::Mul for Vec3<T> {
 }
 
 #[repr(C)]
-#[derive(Clone, Copy, Default)]
+#[derive(Clone, Copy)]
 pub struct Vec4<T> {
     pub x: T,
     pub y: T,

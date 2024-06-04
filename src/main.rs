@@ -260,7 +260,7 @@ fn main() {
     let mut player_speed: Vec2<f32> = Vec2::default();
     let mut camera_speed: Vec2<f32> = Vec2::default();
 
-    let mut world_cursor = Vec4::default();
+    let mut world_cursor = Vec3::default();
 
     let mut quads = vec![Geom {
         translate: Vec2::default().into(),
@@ -697,14 +697,7 @@ fn main() {
                 z: -1.0,
                 w: 1.0,
             };
-
-            #[allow(clippy::cast_possible_truncation)]
-            let mut far = Vec4 {
-                x: screen_cursor.x as f32,
-                y: -screen_cursor.y as f32,
-                z: 1.0,
-                w: 1.0,
-            };
+            let mut far = Vec4 { z: 1.0, ..near };
 
             near = near.dot(&inverse_projection);
             near /= near.w.into();
@@ -713,31 +706,26 @@ fn main() {
 
             let inverse_view = math::invert(&view);
 
-            let ray = near.dot(&inverse_view);
-            let mut ray = Vec3 { x: ray.x, y: ray.y, z: ray.z };
+            let ray_origin = near.dot(&inverse_view);
+            let ray_origin = Vec3 {
+                x: ray_origin.x,
+                y: ray_origin.y,
+                z: ray_origin.z,
+            };
 
-            let direction = (far - near).dot(&inverse_view);
-            let direction = Vec3 {
-                x: direction.x,
-                y: direction.y,
-                z: direction.z,
+            let ray_direction = (far - near).dot(&inverse_view);
+            let ray_direction = Vec3 {
+                x: ray_direction.x,
+                y: ray_direction.y,
+                z: ray_direction.z,
             }
             .normalize();
 
             let plane_origin = Vec3 { x: camera.x, y: camera.y, z: 0.0 };
             let plane_normal = Vec3 { x: 0.0, y: 0.0, z: 1.0 };
+            let t = (plane_origin - ray_origin).dot(plane_normal) / plane_normal.dot(ray_direction);
 
-            let denominator = plane_normal.dot(direction);
-            let t = if f32::EPSILON < denominator.abs() {
-                (plane_origin - ray).dot(plane_normal) / denominator
-            } else {
-                panic!()
-            };
-            ray += direction * t.into();
-
-            world_cursor.x = ray.x;
-            world_cursor.y = ray.y;
-            world_cursor.z = ray.z;
+            world_cursor = ray_origin + (ray_direction * t.into());
         };
 
         let cursor_waypoint_idx = {
