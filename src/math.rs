@@ -159,97 +159,39 @@ impl<T: ops::DivAssign> ops::DivAssign for Vec4<T> {
 #[derive(Clone, Copy, Default)]
 pub struct Mat4<T>(pub [[T; 4]; 4]);
 
+#[rustfmt::skip]
 #[allow(clippy::suboptimal_flops)]
 pub fn invert(mat: &Mat4<f32>) -> Mat4<f32> {
     let mut out = [[0.0; 4]; 4];
-    let mut m = [0.0; 4 * 4];
+
+    let mut xs = [0.0; 4 * 4];
     for i in 0..4 {
         for j in 0..4 {
-            m[(j * 4) + i] = mat.0[i][j];
+            xs[(j * 4) + i] = mat.0[i][j];
         }
     }
 
-    out[0][0] = m[5] * m[10] * m[15] - m[5] * m[11] * m[14] - m[9] * m[6] * m[15]
-        + m[9] * m[7] * m[14]
-        + m[13] * m[6] * m[11]
-        - m[13] * m[7] * m[10];
+    out[0][0] =  xs[5] * xs[10] * xs[15] - xs[5] * xs[11] * xs[14] - xs[9] * xs[6] * xs[15] + xs[9] * xs[7] * xs[14] + xs[13] * xs[6] * xs[11] - xs[13] * xs[7] * xs[10];
+    out[1][0] = -xs[1] * xs[10] * xs[15] + xs[1] * xs[11] * xs[14] + xs[9] * xs[2] * xs[15] - xs[9] * xs[3] * xs[14] - xs[13] * xs[2] * xs[11] + xs[13] * xs[3] * xs[10];
+    out[2][0] =  xs[1] * xs[6]  * xs[15] - xs[1] * xs[7]  * xs[14] - xs[5] * xs[2] * xs[15] + xs[5] * xs[3] * xs[14] + xs[13] * xs[2] * xs[7]  - xs[13] * xs[3] * xs[6];
+    out[3][0] = -xs[1] * xs[6]  * xs[11] + xs[1] * xs[7]  * xs[10] + xs[5] * xs[2] * xs[11] - xs[5] * xs[3] * xs[10] - xs[9]  * xs[2] * xs[7]  + xs[9]  * xs[3] * xs[6];
 
-    out[1][0] = -m[1] * m[10] * m[15] + m[1] * m[11] * m[14] + m[9] * m[2] * m[15]
-        - m[9] * m[3] * m[14]
-        - m[13] * m[2] * m[11]
-        + m[13] * m[3] * m[10];
+    out[0][1] = -xs[4] * xs[10] * xs[15] + xs[4] * xs[11] * xs[14] + xs[8] * xs[6] * xs[15] - xs[8] * xs[7] * xs[14] - xs[12] * xs[6] * xs[11] + xs[12] * xs[7] * xs[10];
+    out[1][1] =  xs[0] * xs[10] * xs[15] - xs[0] * xs[11] * xs[14] - xs[8] * xs[2] * xs[15] + xs[8] * xs[3] * xs[14] + xs[12] * xs[2] * xs[11] - xs[12] * xs[3] * xs[10];
+    out[2][1] = -xs[0] * xs[6]  * xs[15] + xs[0] * xs[7]  * xs[14] + xs[4] * xs[2] * xs[15] - xs[4] * xs[3] * xs[14] - xs[12] * xs[2] * xs[7]  + xs[12] * xs[3] * xs[6];
+    out[3][1] =  xs[0] * xs[6]  * xs[11] - xs[0] * xs[7]  * xs[10] - xs[4] * xs[2] * xs[11] + xs[4] * xs[3] * xs[10] + xs[8]  * xs[2] * xs[7]  - xs[8]  * xs[3] * xs[6];
 
-    out[2][0] = m[1] * m[6] * m[15] - m[1] * m[7] * m[14] - m[5] * m[2] * m[15]
-        + m[5] * m[3] * m[14]
-        + m[13] * m[2] * m[7]
-        - m[13] * m[3] * m[6];
+    out[0][2] =  xs[4] * xs[9]  * xs[15] - xs[4] * xs[11] * xs[13] - xs[8] * xs[5] * xs[15] + xs[8] * xs[7] * xs[13] + xs[12] * xs[5] * xs[11] - xs[12] * xs[7] * xs[9];
+    out[1][2] = -xs[0] * xs[9]  * xs[15] + xs[0] * xs[11] * xs[13] + xs[8] * xs[1] * xs[15] - xs[8] * xs[3] * xs[13] - xs[12] * xs[1] * xs[11] + xs[12] * xs[3] * xs[9];
+    out[2][2] =  xs[0] * xs[5]  * xs[15] - xs[0] * xs[7]  * xs[13] - xs[4] * xs[1] * xs[15] + xs[4] * xs[3] * xs[13] + xs[12] * xs[1] * xs[7]  - xs[12] * xs[3] * xs[5];
+    out[3][2] = -xs[0] * xs[5]  * xs[11] + xs[0] * xs[7]  * xs[9]  + xs[4] * xs[1] * xs[11] - xs[4] * xs[3] * xs[9]  - xs[8]  * xs[1] * xs[7]  + xs[8]  * xs[3] * xs[5];
 
-    out[3][0] = -m[1] * m[6] * m[11] + m[1] * m[7] * m[10] + m[5] * m[2] * m[11]
-        - m[5] * m[3] * m[10]
-        - m[9] * m[2] * m[7]
-        + m[9] * m[3] * m[6];
+    out[0][3] = -xs[4] * xs[9]  * xs[14] + xs[4] * xs[10] * xs[13] + xs[8] * xs[5] * xs[14] - xs[8] * xs[6] * xs[13] - xs[12] * xs[5] * xs[10] + xs[12] * xs[6] * xs[9];
+    out[1][3] =  xs[0] * xs[9]  * xs[14] - xs[0] * xs[10] * xs[13] - xs[8] * xs[1] * xs[14] + xs[8] * xs[2] * xs[13] + xs[12] * xs[1] * xs[10] - xs[12] * xs[2] * xs[9];
+    out[2][3] = -xs[0] * xs[5]  * xs[14] + xs[0] * xs[6]  * xs[13] + xs[4] * xs[1] * xs[14] - xs[4] * xs[2] * xs[13] - xs[12] * xs[1] * xs[6]  + xs[12] * xs[2] * xs[5];
+    out[3][3] =  xs[0] * xs[5]  * xs[10] - xs[0] * xs[6]  * xs[9]  - xs[4] * xs[1] * xs[10] + xs[4] * xs[2] * xs[9]  + xs[8]  * xs[1] * xs[6]  - xs[8]  * xs[2] * xs[5];
 
-    out[0][1] = -m[4] * m[10] * m[15] + m[4] * m[11] * m[14] + m[8] * m[6] * m[15]
-        - m[8] * m[7] * m[14]
-        - m[12] * m[6] * m[11]
-        + m[12] * m[7] * m[10];
-
-    out[1][1] = m[0] * m[10] * m[15] - m[0] * m[11] * m[14] - m[8] * m[2] * m[15]
-        + m[8] * m[3] * m[14]
-        + m[12] * m[2] * m[11]
-        - m[12] * m[3] * m[10];
-
-    out[2][1] = -m[0] * m[6] * m[15] + m[0] * m[7] * m[14] + m[4] * m[2] * m[15]
-        - m[4] * m[3] * m[14]
-        - m[12] * m[2] * m[7]
-        + m[12] * m[3] * m[6];
-
-    out[3][1] = m[0] * m[6] * m[11] - m[0] * m[7] * m[10] - m[4] * m[2] * m[11]
-        + m[4] * m[3] * m[10]
-        + m[8] * m[2] * m[7]
-        - m[8] * m[3] * m[6];
-
-    out[0][2] = m[4] * m[9] * m[15] - m[4] * m[11] * m[13] - m[8] * m[5] * m[15]
-        + m[8] * m[7] * m[13]
-        + m[12] * m[5] * m[11]
-        - m[12] * m[7] * m[9];
-
-    out[1][2] = -m[0] * m[9] * m[15] + m[0] * m[11] * m[13] + m[8] * m[1] * m[15]
-        - m[8] * m[3] * m[13]
-        - m[12] * m[1] * m[11]
-        + m[12] * m[3] * m[9];
-
-    out[2][2] = m[0] * m[5] * m[15] - m[0] * m[7] * m[13] - m[4] * m[1] * m[15]
-        + m[4] * m[3] * m[13]
-        + m[12] * m[1] * m[7]
-        - m[12] * m[3] * m[5];
-
-    out[0][3] = -m[4] * m[9] * m[14] + m[4] * m[10] * m[13] + m[8] * m[5] * m[14]
-        - m[8] * m[6] * m[13]
-        - m[12] * m[5] * m[10]
-        + m[12] * m[6] * m[9];
-
-    out[3][2] = -m[0] * m[5] * m[11] + m[0] * m[7] * m[9] + m[4] * m[1] * m[11]
-        - m[4] * m[3] * m[9]
-        - m[8] * m[1] * m[7]
-        + m[8] * m[3] * m[5];
-
-    out[1][3] = m[0] * m[9] * m[14] - m[0] * m[10] * m[13] - m[8] * m[1] * m[14]
-        + m[8] * m[2] * m[13]
-        + m[12] * m[1] * m[10]
-        - m[12] * m[2] * m[9];
-
-    out[2][3] = -m[0] * m[5] * m[14] + m[0] * m[6] * m[13] + m[4] * m[1] * m[14]
-        - m[4] * m[2] * m[13]
-        - m[12] * m[1] * m[6]
-        + m[12] * m[2] * m[5];
-
-    out[3][3] = m[0] * m[5] * m[10] - m[0] * m[6] * m[9] - m[4] * m[1] * m[10]
-        + m[4] * m[2] * m[9]
-        + m[8] * m[1] * m[6]
-        - m[8] * m[2] * m[5];
-
-    let det = m[0] * out[0][0] + m[1] * out[0][1] + m[2] * out[0][2] + m[3] * out[0][3];
+    let det = xs[0] * out[0][0] + xs[1] * out[0][1] + xs[2] * out[0][2] + xs[3] * out[0][3];
 
     assert!(det != 0.0);
     let inv_det = 1.0 / det;
@@ -293,7 +235,7 @@ pub fn inverse_perspective(mat: &Mat4<f32>) -> Mat4<f32> {
 
 #[test]
 fn test_inverse_perspective() {
-    let projection = perspective(0.45, 800.0 / 600.0, 1.0, 1000.0);
+    let projection = perspective(0.45, 1400.0 / 900.0, 1.0, 1000.0);
     let inverse_projection = inverse_perspective(&projection);
     let identity = projection.dot(&inverse_projection);
     for i in 0..4 {
@@ -337,9 +279,9 @@ pub fn look_at(from: Vec3<f32>, to: Vec3<f32>, up: Vec3<f32>) -> Mat4<f32> {
 #[test]
 fn test_inverse_look_at() {
     let view = look_at(
-        Vec3 { x: 0.0, y: 0.0, z: 100.0 },
-        Vec3 { x: 0.0, y: 1.0, z: 0.0 },
-        Vec3 { x: 0.0, y: 1.0, z: 0.0 },
+        Vec3 { x: 0.0, y: 3.0, z: 5.0 },
+        Vec3 { x: 2.0, y: 1.0, z: 0.0 },
+        Vec3 { x: 0.0, y: 1.0, z: 1.0 }.normalize(),
     );
     let inverse_view = invert(&view);
     let identity = view.dot(&inverse_view);
@@ -384,21 +326,17 @@ impl Dot<Self, f32> for Vec3<f32> {
     }
 }
 
+#[rustfmt::skip]
 impl Dot<[f32; 4], f32> for Vec4<f32> {
     fn dot(self, other: [f32; 4]) -> f32 {
-        self.w.mul_add(
-            other[3],
-            self.z.mul_add(other[2], self.y.mul_add(other[1], self.x * other[0])),
-        )
+        self.w.mul_add(other[3], self.z.mul_add(other[2], self.y.mul_add(other[1], self.x * other[0])))
     }
 }
 
+#[rustfmt::skip]
 impl Dot<[f32; 4], f32> for [f32; 4] {
     fn dot(self, other: [f32; 4]) -> f32 {
-        self[3].mul_add(
-            other[3],
-            self[2].mul_add(other[2], self[1].mul_add(other[1], self[0] * other[0])),
-        )
+        self[3].mul_add(other[3], self[2].mul_add(other[2], self[1].mul_add(other[1], self[0] * other[0])))
     }
 }
 
