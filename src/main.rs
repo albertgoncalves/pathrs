@@ -712,25 +712,29 @@ fn main() {
             far /= far.w.into();
 
             let inverse_view = math::invert(&view);
-            let direction = (far - near).dot(&inverse_view);
-            let ray = near.dot(&inverse_view);
 
+            let ray = near.dot(&inverse_view);
             let mut ray = Vec3 { x: ray.x, y: ray.y, z: ray.z };
+
+            let direction = (far - near).dot(&inverse_view);
             let direction = Vec3 {
                 x: direction.x,
                 y: direction.y,
                 z: direction.z,
             }
             .normalize();
-            let normal = Vec3 { x: 0.0, y: 0.0, z: 1.0 };
-            let denominator = normal.dot(direction);
-            let origin = Vec3 { x: camera.x, y: camera.y, z: 0.0 };
+
+            let plane_origin = Vec3 { x: camera.x, y: camera.y, z: 0.0 };
+            let plane_normal = Vec3 { x: 0.0, y: 0.0, z: 1.0 };
+
+            let denominator = plane_normal.dot(direction);
             let t = if f32::EPSILON < denominator.abs() {
-                (origin - ray).dot(normal) / denominator
+                (plane_origin - ray).dot(plane_normal) / denominator
             } else {
                 panic!()
             };
             ray += direction * t.into();
+
             world_cursor.x = ray.x;
             world_cursor.y = ray.y;
             world_cursor.z = ray.z;
