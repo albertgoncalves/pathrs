@@ -736,18 +736,18 @@ fn main() {
         };
 
         let cursor_waypoint_idx = {
-            let mut min_gap = f32::INFINITY;
+            let mut min_d = f32::INFINITY;
             let mut cursor_waypoint_idx = quads.len();
 
             for (i, neighbor) in quads[first_waypoint_idx..].iter().enumerate() {
-                let gap = Vec2 {
+                let d = Vec2 {
                     x: world_cursor.x,
                     y: world_cursor.y,
                 }
                 .distance(neighbor.translate.0);
-                assert!(gap.is_sign_positive());
-                if gap < min_gap {
-                    min_gap = gap;
+                assert!(d.is_sign_positive());
+                if d < min_d {
+                    min_d = d;
                     cursor_waypoint_idx = i;
                 }
             }
@@ -763,22 +763,21 @@ fn main() {
             &mut path_counter,
         );
         {
-            let gap = {
-                let mut gap = (quads[player_waypoint_idx].translate.0)
-                    .distance(quads[player_quad_idx].translate.0);
-                assert!(gap.is_sign_positive());
-
-                if (1 < path.len()) && (gap <= (PLAYER_QUAD_SCALE / 2.0)) {
-                    player_waypoint_idx = first_waypoint_idx + path[1];
-                    gap = (quads[player_waypoint_idx].translate.0)
-                        .distance(quads[player_quad_idx].translate.0);
-                    assert!(gap.is_sign_positive());
-                }
-
-                gap
+            let distance = |i: usize| {
+                let d = quads[i].translate.0.distance(quads[player_quad_idx].translate.0);
+                assert!(d.is_sign_positive());
+                d
             };
 
-            if (PLAYER_QUAD_SCALE / 2.0) < gap {
+            let d = distance(player_waypoint_idx);
+            let d = if (1 < path.len()) && (d <= (PLAYER_QUAD_SCALE / 2.0)) {
+                player_waypoint_idx = first_waypoint_idx + path[1];
+                distance(player_waypoint_idx)
+            } else {
+                d
+            };
+
+            if (PLAYER_QUAD_SCALE / 2.0) < d {
                 let step =
                     quads[player_waypoint_idx].translate.0 - quads[player_quad_idx].translate.0;
                 player_speed += step.normalize() * PLAYER_ACCEL.into();
