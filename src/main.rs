@@ -188,7 +188,7 @@ macro_rules! uniform {
             ),
             1,
             ffi::GL_FALSE,
-            $ident.0.as_ptr().cast::<ffi::GLfloat>(),
+            $ident.as_ptr().cast::<ffi::GLfloat>(),
         );
     };
 }
