@@ -285,7 +285,6 @@ pub fn invert(mat: &Mat4<f32>) -> Mat4<f32> {
 
     let reciprocal = 1.0 / determinant;
 
-    #[allow(clippy::needless_range_loop)]
     for i in 0..4 {
         for j in 0..4 {
             inv.0[i][j] *= reciprocal;
