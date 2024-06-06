@@ -338,20 +338,6 @@ pub fn look_at(from: Vec3<f32>, to: Vec3<f32>, up: Vec3<f32>) -> Mat4<f32> {
     mat
 }
 
-pub trait Rotate<T> {
-    fn rotate(&mut self, center: Self, radians: T);
-}
-
-impl Rotate<f32> for Vec2<f32> {
-    fn rotate(&mut self, center: Self, radians: f32) {
-        let delta = *self - center;
-        let sin = radians.sin();
-        let cos = radians.cos();
-        self.x = delta.y.mul_add(-sin, delta.x.mul_add(cos, center.x));
-        self.y = delta.y.mul_add(cos, delta.x.mul_add(sin, center.y));
-    }
-}
-
 pub trait Dot<A, B> {
     fn dot(self, other: A) -> B;
 }

@@ -1,4 +1,4 @@
-use crate::math::{Rotate, Vec2, Vec4};
+use crate::math::{Vec2, Vec4};
 
 #[repr(C)]
 #[derive(Clone, Copy)]
@@ -50,14 +50,5 @@ impl From<Line<f32>> for Translate<f32> {
 impl From<Line<f32>> for Scale<f32> {
     fn from(line: Line<f32>) -> Self {
         Self(line.0 - line.1)
-    }
-}
-
-impl Line<f32> {
-    #[allow(dead_code)]
-    pub fn new(point: Vec2<f32>, length: f32, radians: f32) -> Self {
-        let mut line = Self(point, point + Vec2 { x: length, y: 0.0 });
-        line.1.rotate(point, radians);
-        line
     }
 }
