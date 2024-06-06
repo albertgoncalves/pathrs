@@ -117,6 +117,14 @@ impl<T: ops::Mul<Output = T>> ops::Mul for Vec3<T> {
     }
 }
 
+impl<T: ops::MulAssign> ops::MulAssign for Vec3<T> {
+    fn mul_assign(&mut self, other: Self) {
+        self.x *= other.x;
+        self.y *= other.y;
+        self.z *= other.z;
+    }
+}
+
 #[repr(C)]
 #[derive(Clone, Copy)]
 pub struct Vec4<T> {
@@ -165,135 +173,52 @@ const fn column<T: Copy>(mat: &Mat4<T>, j: usize) -> [T; 4] {
     [mat[0][j], mat[1][j], mat[2][j], mat[3][j]]
 }
 
-#[rustfmt::skip]
-#[allow(clippy::suboptimal_flops)]
+#[allow(clippy::many_single_char_names)]
 pub fn invert(mat: &Mat4<f32>) -> Mat4<f32> {
-    let mut inv = Mat4::default();
+    let a = Vec3 {
+        x: mat[0][0],
+        y: mat[0][1],
+        z: mat[0][2],
+    };
+    let b = Vec3 {
+        x: mat[1][0],
+        y: mat[1][1],
+        z: mat[1][2],
+    };
+    let c = Vec3 {
+        x: mat[2][0],
+        y: mat[2][1],
+        z: mat[2][2],
+    };
+    let d = Vec3 {
+        x: mat[3][0],
+        y: mat[3][1],
+        z: mat[3][2],
+    };
 
-    inv[0][0] =  (mat[1][1] * mat[2][2] * mat[3][3]) -
-                 (mat[1][1] * mat[3][2] * mat[2][3]) -
-                 (mat[1][2] * mat[2][1] * mat[3][3]) +
-                 (mat[1][2] * mat[3][1] * mat[2][3]) +
-                 (mat[1][3] * mat[2][1] * mat[3][2]) -
-                 (mat[1][3] * mat[3][1] * mat[2][2]);
+    let mut e = a.cross(b);
+    let mut f = c.cross(d);
+    let mut g = (a * mat[1][3].into()) - (b * mat[0][3].into());
+    let mut h = (c * mat[3][3].into()) - (d * mat[2][3].into());
 
-    inv[1][0] = -(mat[1][0] * mat[2][2] * mat[3][3]) +
-                 (mat[1][0] * mat[3][2] * mat[2][3]) +
-                 (mat[1][2] * mat[2][0] * mat[3][3]) -
-                 (mat[1][2] * mat[3][0] * mat[2][3]) -
-                 (mat[1][3] * mat[2][0] * mat[3][2]) +
-                 (mat[1][3] * mat[3][0] * mat[2][2]);
+    let inv_determinant = (1.0 / (e.dot(h) + f.dot(g))).into();
 
-    inv[2][0] =  (mat[1][0] * mat[2][1] * mat[3][3]) -
-                 (mat[1][0] * mat[3][1] * mat[2][3]) -
-                 (mat[1][1] * mat[2][0] * mat[3][3]) +
-                 (mat[1][1] * mat[3][0] * mat[2][3]) +
-                 (mat[1][3] * mat[2][0] * mat[3][1]) -
-                 (mat[1][3] * mat[3][0] * mat[2][1]);
+    e *= inv_determinant;
+    f *= inv_determinant;
+    g *= inv_determinant;
+    h *= inv_determinant;
 
-    inv[3][0] = -(mat[1][0] * mat[2][1] * mat[3][2]) +
-                 (mat[1][0] * mat[3][1] * mat[2][2]) +
-                 (mat[1][1] * mat[2][0] * mat[3][2]) -
-                 (mat[1][1] * mat[3][0] * mat[2][2]) -
-                 (mat[1][2] * mat[2][0] * mat[3][1]) +
-                 (mat[1][2] * mat[3][0] * mat[2][1]);
+    let i = b.cross(h) + (f * mat[1][3].into());
+    let j = h.cross(a) - (f * mat[0][3].into());
+    let k = d.cross(g) + (e * mat[3][3].into());
+    let l = g.cross(c) - (e * mat[2][3].into());
 
-    inv[0][1] = -(mat[0][1] * mat[2][2] * mat[3][3]) +
-                 (mat[0][1] * mat[3][2] * mat[2][3]) +
-                 (mat[0][2] * mat[2][1] * mat[3][3]) -
-                 (mat[0][2] * mat[3][1] * mat[2][3]) -
-                 (mat[0][3] * mat[2][1] * mat[3][2]) +
-                 (mat[0][3] * mat[3][1] * mat[2][2]);
-
-    inv[1][1] =  (mat[0][0] * mat[2][2] * mat[3][3]) -
-                 (mat[0][0] * mat[3][2] * mat[2][3]) -
-                 (mat[0][2] * mat[2][0] * mat[3][3]) +
-                 (mat[0][2] * mat[3][0] * mat[2][3]) +
-                 (mat[0][3] * mat[2][0] * mat[3][2]) -
-                 (mat[0][3] * mat[3][0] * mat[2][2]);
-
-    inv[2][1] = -(mat[0][0] * mat[2][1] * mat[3][3]) +
-                 (mat[0][0] * mat[3][1] * mat[2][3]) +
-                 (mat[0][1] * mat[2][0] * mat[3][3]) -
-                 (mat[0][1] * mat[3][0] * mat[2][3]) -
-                 (mat[0][3] * mat[2][0] * mat[3][1]) +
-                 (mat[0][3] * mat[3][0] * mat[2][1]);
-
-    inv[3][1] =  (mat[0][0] * mat[2][1] * mat[3][2]) -
-                 (mat[0][0] * mat[3][1] * mat[2][2]) -
-                 (mat[0][1] * mat[2][0] * mat[3][2]) +
-                 (mat[0][1] * mat[3][0] * mat[2][2]) +
-                 (mat[0][2] * mat[2][0] * mat[3][1]) -
-                 (mat[0][2] * mat[3][0] * mat[2][1]);
-
-    inv[0][2] =  (mat[0][1] * mat[1][2] * mat[3][3]) -
-                 (mat[0][1] * mat[3][2] * mat[1][3]) -
-                 (mat[0][2] * mat[1][1] * mat[3][3]) +
-                 (mat[0][2] * mat[3][1] * mat[1][3]) +
-                 (mat[0][3] * mat[1][1] * mat[3][2]) -
-                 (mat[0][3] * mat[3][1] * mat[1][2]);
-
-    inv[1][2] = -(mat[0][0] * mat[1][2] * mat[3][3]) +
-                 (mat[0][0] * mat[3][2] * mat[1][3]) +
-                 (mat[0][2] * mat[1][0] * mat[3][3]) -
-                 (mat[0][2] * mat[3][0] * mat[1][3]) -
-                 (mat[0][3] * mat[1][0] * mat[3][2]) +
-                 (mat[0][3] * mat[3][0] * mat[1][2]);
-
-    inv[2][2] =  (mat[0][0] * mat[1][1] * mat[3][3]) -
-                 (mat[0][0] * mat[3][1] * mat[1][3]) -
-                 (mat[0][1] * mat[1][0] * mat[3][3]) +
-                 (mat[0][1] * mat[3][0] * mat[1][3]) +
-                 (mat[0][3] * mat[1][0] * mat[3][1]) -
-                 (mat[0][3] * mat[3][0] * mat[1][1]);
-
-    inv[3][2] = -(mat[0][0] * mat[1][1] * mat[3][2]) +
-                 (mat[0][0] * mat[3][1] * mat[1][2]) +
-                 (mat[0][1] * mat[1][0] * mat[3][2]) -
-                 (mat[0][1] * mat[3][0] * mat[1][2]) -
-                 (mat[0][2] * mat[1][0] * mat[3][1]) +
-                 (mat[0][2] * mat[3][0] * mat[1][1]);
-
-    inv[0][3] = -(mat[0][1] * mat[1][2] * mat[2][3]) +
-                 (mat[0][1] * mat[2][2] * mat[1][3]) +
-                 (mat[0][2] * mat[1][1] * mat[2][3]) -
-                 (mat[0][2] * mat[2][1] * mat[1][3]) -
-                 (mat[0][3] * mat[1][1] * mat[2][2]) +
-                 (mat[0][3] * mat[2][1] * mat[1][2]);
-
-    inv[1][3] =  (mat[0][0] * mat[1][2] * mat[2][3]) -
-                 (mat[0][0] * mat[2][2] * mat[1][3]) -
-                 (mat[0][2] * mat[1][0] * mat[2][3]) +
-                 (mat[0][2] * mat[2][0] * mat[1][3]) +
-                 (mat[0][3] * mat[1][0] * mat[2][2]) -
-                 (mat[0][3] * mat[2][0] * mat[1][2]);
-
-    inv[2][3] = -(mat[0][0] * mat[1][1] * mat[2][3]) +
-                 (mat[0][0] * mat[2][1] * mat[1][3]) +
-                 (mat[0][1] * mat[1][0] * mat[2][3]) -
-                 (mat[0][1] * mat[2][0] * mat[1][3]) -
-                 (mat[0][3] * mat[1][0] * mat[2][1]) +
-                 (mat[0][3] * mat[2][0] * mat[1][1]);
-
-    inv[3][3] =  (mat[0][0] * mat[1][1] * mat[2][2]) -
-                 (mat[0][0] * mat[2][1] * mat[1][2]) -
-                 (mat[0][1] * mat[1][0] * mat[2][2]) +
-                 (mat[0][1] * mat[2][0] * mat[1][2]) +
-                 (mat[0][2] * mat[1][0] * mat[2][1]) -
-                 (mat[0][2] * mat[2][0] * mat[1][1]);
-
-    let determinant = column(mat, 0).dot(inv[0]);
-    assert!(determinant != 0.0);
-
-    let reciprocal = 1.0 / determinant;
-
-    for row in &mut inv {
-        for cell in row {
-            *cell *= reciprocal;
-        }
-    }
-
-    inv
+    [
+        [i.x, j.x, k.x, l.x],
+        [i.y, j.y, k.y, l.y],
+        [i.z, j.z, k.z, l.z],
+        [-b.dot(f), a.dot(f), -d.dot(e), c.dot(e)],
+    ]
 }
 
 // NOTE: See `https://www.khronos.org/registry/OpenGL-Refpages/gl2.1/xhtml/gluPerspective.xml`.
@@ -469,6 +394,6 @@ mod tests {
             Vec3 { x: -11.0, y: 1.0, z: -1.5 },
             Vec3 { x: 0.25, y: 1.0, z: 0.8 }.normalize(),
         );
-        assert!(compare(&view.dot(&invert(&view)), &IDENTITY, f32::EPSILON * 32.0));
+        assert!(compare(&view.dot(&invert(&view)), &IDENTITY, f32::EPSILON * 8.0));
     }
 }
