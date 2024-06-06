@@ -256,7 +256,7 @@ fn main() {
         VIEW_DISTANCE - 100.0,
         VIEW_DISTANCE + 100.0,
     );
-    let inverse_projection: Mat4<f32> = math::inverse_perspective(&projection);
+    let inverse_projection: Mat4<f32> = math::invert(&projection);
 
     let mut camera = Vec3 {
         x: 0.0,

@@ -311,35 +311,6 @@ pub fn perspective(fov: f32, aspect_ratio: f32, near: f32, far: f32) -> Mat4<f32
     mat
 }
 
-pub fn inverse_perspective(mat: &Mat4<f32>) -> Mat4<f32> {
-    let mut inv = Mat4::default();
-
-    inv[0][0] = 1.0 / mat[0][0];
-    inv[1][1] = 1.0 / mat[1][1];
-    inv[2][3] = 1.0 / mat[3][2];
-    inv[3][3] = mat[2][2] * inv[2][3];
-    inv[3][2] = mat[2][3];
-
-    inv
-}
-
-#[test]
-fn test_inverse_perspective() {
-    let projection = perspective(0.45, 1400.0 / 900.0, 1.0, 1000.0);
-    let inverse_projection = inverse_perspective(&projection);
-    let identity = projection.dot(&inverse_projection);
-
-    for (i, row) in identity.iter().enumerate() {
-        for (j, cell) in row.iter().enumerate() {
-            if i == j {
-                assert!((cell - 1.0).abs() < f32::EPSILON);
-            } else {
-                assert!(cell.abs() < f32::EPSILON);
-            }
-        }
-    }
-}
-
 pub fn look_at(from: Vec3<f32>, to: Vec3<f32>, up: Vec3<f32>) -> Mat4<f32> {
     let forward: Vec3<f32> = (to - from).normalize();
     let right: Vec3<f32> = forward.cross(up).normalize();
@@ -365,27 +336,6 @@ pub fn look_at(from: Vec3<f32>, to: Vec3<f32>, up: Vec3<f32>) -> Mat4<f32> {
     mat[3][3] = 1.0;
 
     mat
-}
-
-#[test]
-fn test_inverse_look_at() {
-    let view = look_at(
-        Vec3 { x: 0.0, y: 3.0, z: 5.0 },
-        Vec3 { x: 2.0, y: 1.0, z: 0.0 },
-        Vec3 { x: 0.0, y: 1.0, z: 1.0 }.normalize(),
-    );
-    let inverse_view = invert(&view);
-    let identity = view.dot(&inverse_view);
-
-    for (i, row) in identity.iter().enumerate() {
-        for (j, cell) in row.iter().enumerate() {
-            if i == j {
-                assert!((cell - 1.0).abs() < f32::EPSILON);
-            } else {
-                assert!(cell.abs() < f32::EPSILON);
-            }
-        }
-    }
 }
 
 pub trait Rotate<T> {
@@ -495,5 +445,44 @@ impl<T: Dot<T, f32> + ops::Sub<Output = T> + Copy> Distance<f32> for T {
     fn distance(self, other: Self) -> f32 {
         let delta: Self = self - other;
         (delta.dot(delta) + f32::EPSILON).sqrt()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const IDENTITY: Mat4<f32> = [
+        [1.0, 0.0, 0.0, 0.0],
+        [0.0, 1.0, 0.0, 0.0],
+        [0.0, 0.0, 1.0, 0.0],
+        [0.0, 0.0, 0.0, 1.0],
+    ];
+
+    fn compare(a: &Mat4<f32>, b: &Mat4<f32>, epsilon: f32) -> bool {
+        for (i, row) in a.iter().enumerate() {
+            for (j, cell) in row.iter().enumerate() {
+                if epsilon < (cell - b[i][j]).abs() {
+                    return false;
+                }
+            }
+        }
+        true
+    }
+
+    #[test]
+    fn test_inverse_perspective() {
+        let projection = perspective(0.45, 1400.0 / 900.0, 1.0, 1000.0);
+        assert!(compare(&projection.dot(&invert(&projection)), &IDENTITY, f32::EPSILON));
+    }
+
+    #[test]
+    fn test_inverse_look_at() {
+        let view = look_at(
+            Vec3 { x: 40.0, y: 13.5, z: 5.0 },
+            Vec3 { x: -11.0, y: 1.0, z: -1.5 },
+            Vec3 { x: 0.25, y: 1.0, z: 0.8 }.normalize(),
+        );
+        assert!(compare(&view.dot(&invert(&view)), &IDENTITY, f32::EPSILON * 32.0));
     }
 }
