@@ -61,6 +61,14 @@ bin/main: src/*
 run: bin/main
 	RUST_BACKTRACE=1 ./bin/main
 
+.PHONY: profile
+profile: bin/main
+	sudo sh -c "echo 1 > /proc/sys/kernel/perf_event_paranoid"
+	sudo sh -c "echo 0 > /proc/sys/kernel/kptr_restrict"
+	perf record --call-graph fp ./bin/main
+	perf report --inline
+	rm perf.data*
+
 bin/test: src/*
 	mkdir -p bin/
 	clang-format -i src/*.glsl
