@@ -4,6 +4,7 @@ SHARED = \
 	--edition 2021
 RUSTC = \
 	-C debuginfo=2 \
+	-C llvm-args="-ffast-math" \
 	-C opt-level=3 \
 	-C overflow-checks=yes \
 	-C panic=unwind \
