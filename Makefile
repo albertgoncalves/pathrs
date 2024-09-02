@@ -15,7 +15,6 @@ RUSTC = \
 	-W elided-lifetimes-in-paths \
 	-W explicit-outlives-requirements \
 	-W future-incompatible \
-	-W indirect-structural-match \
 	-W keyword-idents \
 	-W let-underscore \
 	-W macro-use-extern-crate \
