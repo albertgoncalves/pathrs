@@ -38,7 +38,8 @@ CLIPPY = \
 	-W clippy::perf \
 	-W clippy::suspicious \
 	-A clippy::similar-names \
-	-A clippy::too_many_lines
+	-A clippy::too_many_lines \
+	-A edition-2024-expr-fragment-specifier
 LIBS = \
 	-lGL \
 	-lglfw
