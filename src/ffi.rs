@@ -42,7 +42,7 @@ pub type GLDEBUGPROC = extern "C" fn(
     userParam: *const c_void,
 );
 
-extern "C" {
+unsafe extern "C" {
     pub fn glfwGetVersionString() -> *const c_char;
 
     pub fn glfwInit() -> c_int;
