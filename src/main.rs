@@ -113,7 +113,7 @@ fn compile_shader(r#type: ffi::GLenum, source: &str) -> ffi::GLuint {
             shader,
             1,
             [source.as_bytes().as_ptr().cast::<ffi::GLchar>()].as_ptr(),
-            [source.as_bytes().len().try_into().unwrap()].as_ptr(),
+            [source.len().try_into().unwrap()].as_ptr(),
         );
         ffi::glCompileShader(shader);
         shader
