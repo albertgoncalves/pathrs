@@ -11,6 +11,7 @@ use crate::math::{Distance, Dot, Mat4, Normalize, Vec2, Vec3, Vec4};
 use std::collections::HashMap;
 use std::convert::TryInto;
 use std::ffi::{c_char, c_int, c_void, CStr, CString};
+use std::fmt::Write;
 use std::fs;
 use std::mem;
 use std::path::Path;
@@ -67,8 +68,7 @@ const WAYPOINT_HIGHLIGHT_COLOR: Vec4<f32> = Vec4 { y: 1.0, w: 0.675, ..WAYPOINT_
 extern "C" fn callback_glfw_error(error_code: c_int, description: *const c_char) {
     let mut message = error_code.to_string();
     if !description.is_null() {
-        message
-            .push_str(&format!(": {}", unsafe { CStr::from_ptr(description) }.to_str().unwrap()));
+        write!(message, ": {}", unsafe { CStr::from_ptr(description) }.to_str().unwrap()).unwrap();
     }
     panic!("{}", message);
 }
